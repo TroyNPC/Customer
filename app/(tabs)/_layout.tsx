@@ -34,6 +34,12 @@ export default function TabLayout() {
       ),
     }}
   />
+    <Tabs.Screen
+    name="shop"
+    options={{
+      href: null, // hides from tab bar
+    }}
+  />
 </Tabs>
 
   );
