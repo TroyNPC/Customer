@@ -1,31 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
-import { useRouter, useSegments } from "expo-router";
+import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
-import {
-  Dimensions,
-  FlatList,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
-import MapView, { Marker } from "react-native-maps";
+import { FlatList, Text, TouchableOpacity, View } from "react-native";
+import { ScaledSheet, ms, mvs, s } from "react-native-size-matters";
 import Svg, { Path } from "react-native-svg";
+import { WebView } from "react-native-webview";
 
-const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
-const vbW = 1440;
-const vbH = 320;
-
-// Approximate bounding box for Dumaguete
-const DUMAGUETE_BOUNDS = {
-  minLat: 9.25,
-  maxLat: 9.38,
-  minLng: 123.25,
-  maxLng: 123.35,
-};
-
-// Sample laundry shops
 const laundryShops = [
   { id: "1", name: "DJW Laundry Shop", lat: 9.307, lng: 123.305 },
   { id: "2", name: "JNK Laundry Shop", lat: 9.315, lng: 123.31 },
@@ -34,178 +15,239 @@ const laundryShops = [
 ];
 
 export default function MapScreen() {
-  const mapRef = useRef<MapView>(null);
-  const [location, setLocation] = useState<Location.LocationObjectCoords | null>(null);
-  const [lastClicked, setLastClicked] = useState<string | null>(null);
   const router = useRouter();
-  const segments = useSegments();
+  const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [isNavigating, setIsNavigating] = useState(false);
+  const webRef = useRef<WebView>(null);
+  const clickCount = useRef<{ [key: string]: number }>({});
+  const [tracking, setTracking] = useState(false);
+  const [selectedShop, setSelectedShop] = useState<string | null>(null);
+  const locationWatcher = useRef<any>(null);
 
-  // Request user location
   useEffect(() => {
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        console.log("Permission to access location was denied");
-        return;
-      }
+      if (status !== "granted") return;
       let currentLocation = await Location.getCurrentPositionAsync({});
-      setLocation(currentLocation.coords);
+      setLocation({
+        latitude: currentLocation.coords.latitude,
+        longitude: currentLocation.coords.longitude,
+      });
     })();
   }, []);
 
-  const centerOnUser = () => {
-    if (location && mapRef.current) {
-      mapRef.current.animateToRegion({
-        latitude: location.latitude,
-        longitude: location.longitude,
-        latitudeDelta: 0.01,
-        longitudeDelta: 0.01,
+  useEffect(() => {
+    const startTracking = async () => {
+      if (!tracking) {
+        if (locationWatcher.current) {
+          locationWatcher.current.remove();
+          locationWatcher.current = null;
+        }
+        return;
+      }
+
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") return;
+
+      locationWatcher.current = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          timeInterval: 3000,
+          distanceInterval: 5,
+        },
+        (newLoc) => {
+          const newCoords = {
+            latitude: newLoc.coords.latitude,
+            longitude: newLoc.coords.longitude,
+          };
+          setLocation(newCoords);
+          webRef.current?.postMessage(
+            JSON.stringify({ action: "setUserLocation", lat: newCoords.latitude, lng: newCoords.longitude })
+          );
+
+          if (selectedShop) {
+            webRef.current?.postMessage(JSON.stringify({ action: "focusShop", id: selectedShop, track: true }));
+          }
+        }
+      );
+    };
+
+    startTracking();
+    return () => {
+      if (locationWatcher.current) {
+        locationWatcher.current.remove();
+        locationWatcher.current = null;
+      }
+    };
+  }, [tracking, selectedShop]);
+
+  const leafletHTML = `<!DOCTYPE html>
+  <html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css" />
+    <style>
+      html, body, #map { height: 100%; margin: 0; padding: 0; }
+      .highlight-marker { filter: hue-rotate(180deg) brightness(1.6); }
+      .user-marker {
+        width: 24px;
+        height: 24px;
+        background: rgba(0, 136, 255, 0.3);
+        border: 4px solid #007bff;
+        border-radius: 50%;
+        position: relative;
+      }
+      .user-marker::after {
+        content: '';
+        position: absolute;
+        top: -8px;
+        left: 8px;
+        width: 0;
+        height: 0;
+        border-left: 4px solid transparent;
+        border-right: 4px solid transparent;
+        border-bottom: 8px solid #007bff;
+      }
+
+      /* Hide the default routing instruction panel */
+      .leaflet-routing-container {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <script>
+      const map = L.map('map').setView([9.307, 123.305], 14);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' }).addTo(map);
+
+      const shops = ${JSON.stringify(laundryShops)};
+      const markers = {};
+      let userMarker = null;
+      let routeControl = null;
+      let activeMarker = null;
+
+      shops.forEach(shop => {
+        const marker = L.marker([shop.lat, shop.lng]).addTo(map).bindPopup('<b>' + shop.name + '</b><br>Dumaguete City');
+        markers[shop.id] = marker;
       });
+
+      function focusShop(id) {
+        const shop = shops.find(s => s.id === id);
+        if (!shop) return;
+
+        map.flyTo([shop.lat, shop.lng], 17);
+        markers[id].openPopup();
+
+        if (activeMarker) activeMarker.getElement().classList.remove('highlight-marker');
+        const el = markers[id].getElement();
+        if (el) el.classList.add('highlight-marker');
+        activeMarker = markers[id];
+
+        // Draw route without showing instruction panel
+        if (window.currentUser) {
+          if (routeControl) map.removeControl(routeControl);
+          routeControl = L.Routing.control({
+            waypoints: [L.latLng(window.currentUser.lat, window.currentUser.lng), L.latLng(shop.lat, shop.lng)],
+            lineOptions: { styles: [{ color: 'red', weight: 5, opacity: 0.8 }] },
+            addWaypoints: false,
+            createMarker: () => null,
+            show: false,
+          }).addTo(map);
+        }
+      }
+
+      function setUserMarker(lat, lng) {
+        const icon = L.divIcon({ className: 'user-marker', iconSize: [24, 24], iconAnchor: [12, 12] });
+        if (userMarker) userMarker.setLatLng([lat, lng]);
+        else userMarker = L.marker([lat, lng], { icon }).addTo(map).bindPopup("You are here");
+      }
+
+      document.addEventListener('message', (event) => {
+        const data = JSON.parse(event.data);
+        if (data.action === 'focusShop') focusShop(data.id);
+        else if (data.action === 'setUserLocation') {
+          window.currentUser = { lat: data.lat, lng: data.lng };
+          setUserMarker(data.lat, data.lng);
+        } else if (data.action === 'centerUser') {
+          if (window.currentUser) map.setView([window.currentUser.lat, window.currentUser.lng], 15);
+        }
+      });
+    </script>
+  </body>
+  </html>`;
+
+  const handleMessage = (event: any) => {
+    const msg = JSON.parse(event.nativeEvent.data);
+    if (msg.action === "navigate" && !isNavigating) {
+      setIsNavigating(true);
+      router.push(`/shop/${msg.id}`);
+      setTimeout(() => setIsNavigating(false), 800);
     }
   };
 
-const [isNavigating, setIsNavigating] = useState(false); // 👈 add this
+  const centerOnUser = () => {
+    if (location) {
+      webRef.current?.postMessage(JSON.stringify({ action: "centerUser" }));
+    }
+  };
 
+  const handleListClick = (id: string) => {
+    clickCount.current[id] = (clickCount.current[id] || 0) + 1;
+    setSelectedShop(id);
 
-const focusOnShop = (shop: any) => {
-  if (lastClicked === shop.id) {
-    if (isNavigating) return;
-    setIsNavigating(true);
+    if (clickCount.current[id] === 1) {
+      webRef.current?.postMessage(JSON.stringify({ action: "focusShop", id, track: tracking }));
+    } else if (clickCount.current[id] === 2) {
+      router.push(`/shop/${id}`);
+    }
 
-    // Go to shop UI page directly
-    router.push(`/shop/${shop.id}`);
-
-    setLastClicked(null);
-    setTimeout(() => setIsNavigating(false), 500);
-  } else {
-    mapRef.current?.animateToRegion({
-      latitude: shop.lat,
-      longitude: shop.lng,
-      latitudeDelta: 0.01,
-      longitudeDelta: 0.01,
-    });
-    setLastClicked(shop.id);
-  }
-};
-
+    setTimeout(() => (clickCount.current[id] = 0), 800);
+  };
 
   return (
     <View style={styles.container}>
-      {/* ===== Header Box ===== */}
       <View style={styles.headerBox}>
-        <Svg
-          width={screenWidth}
-          height={screenHeight * 0.4}
-          viewBox={`0 0 ${vbW} ${vbH}`}
-          style={styles.waveTop}
-          preserveAspectRatio="none"
-        >
-          <Path
-            fill="#3864C3"
-            d={`
-              M0,${vbH * 0.2}
-              C ${vbW * 0.5},${vbH * -0.1} ${vbW * 0.45},${vbH * 0.6} ${vbW},${vbH * 0.2}
-              L${vbW},0
-              L0,0
-              Z
-            `}
-          />
+        <Svg width="100%" height={mvs(300)} viewBox="0 0 1440 320" style={styles.waveTop} preserveAspectRatio="none">
+          <Path fill="#3864C3" d="M0,64 C720,-32 720,160 1440,64 L1440,0 L0,0 Z" />
         </Svg>
-
         <View style={styles.headerContent}>
           <TouchableOpacity onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={24} color="white" />
+            <Ionicons name="arrow-back" size={ms(24)} color="white" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>LAUNDRY SHOPS NEARBY</Text>
-          <View style={{ width: 24 }} />
+          <TouchableOpacity onPress={() => setTracking(!tracking)}>
+            <Ionicons name={tracking ? "navigate" : "navigate-outline"} size={ms(24)} color="white" />
+          </TouchableOpacity>
         </View>
       </View>
 
-      {/* ===== Map with responsive height ===== */}
       <View style={styles.mapContainer}>
-        <MapView
-          ref={mapRef}
-          style={styles.map}
-          initialRegion={{
-            latitude: 9.307,
-            longitude: 123.305,
-            latitudeDelta: 0.03,
-            longitudeDelta: 0.03,
-          }}
-          showsUserLocation={true}
-          followsUserLocation={true}
-          onRegionChangeComplete={(region) => {
-            // Keep user inside Dumaguete bounds
-            if (
-              region.latitude < DUMAGUETE_BOUNDS.minLat ||
-              region.latitude > DUMAGUETE_BOUNDS.maxLat ||
-              region.longitude < DUMAGUETE_BOUNDS.minLng ||
-              region.longitude > DUMAGUETE_BOUNDS.maxLng
-            ) {
-              mapRef.current?.animateToRegion({
-                latitude: 9.307,
-                longitude: 123.305,
-                latitudeDelta: 0.03,
-                longitudeDelta: 0.03,
-              });
-            }
-          }}
-          customMapStyle={[
-            { featureType: "all", elementType: "labels", stylers: [{ visibility: "off" }] },
-            { featureType: "poi", stylers: [{ visibility: "off" }] },
-            { featureType: "transit", stylers: [{ visibility: "off" }] },
-          ]}
-        >
-          {/* Laundry Shops */}
-          {laundryShops.map((shop) => (
-            <Marker
-              key={shop.id}
-              coordinate={{ latitude: shop.lat, longitude: shop.lng }}
-              title={shop.name}
-              description="Dumaguete City"
-            />
-          ))}
-
-          {/* User Location Marker */}
-          <Marker
-            coordinate={{
-              latitude: location?.latitude || 9.290, // fallback: Junob
-              longitude: location?.longitude || 123.305,
-            }}
-            title="You are here"
-            pinColor="blue"
-          />
-        </MapView>
-
-        {/* Floating GPS Button */}
+        <WebView ref={webRef} originWhitelist={["*"]} source={{ html: leafletHTML }} onMessage={handleMessage} style={{ flex: 1 }} />
         <TouchableOpacity style={styles.gpsButton} onPress={centerOnUser}>
-          <Ionicons name="locate" size={28} color="white" />
+          <Ionicons name="locate" size={ms(28)} color="white" />
         </TouchableOpacity>
       </View>
 
-      {/* ===== Shop List Below Map ===== */}
       <FlatList
         data={laundryShops}
         keyExtractor={(item) => item.id}
-        style={styles.shopList}
         renderItem={({ item }) => (
-          <TouchableOpacity style={styles.shopCard} onPress={() => focusOnShop(item)}>
-            {/* Left icons */}
+          <TouchableOpacity style={styles.shopCard} onPress={() => handleListClick(item.id)}>
             <View style={styles.leftIcons}>
-              <Ionicons name="location" size={20} color="#3864C3" />
-              <Ionicons name="search" size={20} color="#3864C3" style={{ marginLeft: 8 }} />
+              <Ionicons name="location" size={ms(20)} color="#3864C3" />
+              <Ionicons name="search" size={ms(20)} color="#3864C3" style={{ marginLeft: s(8) }} />
             </View>
-
-            {/* Shop Info */}
             <View style={styles.shopInfo}>
               <Text style={styles.shopName}>{item.name}</Text>
               <Text style={styles.shopCity}>Dumaguete City</Text>
               <Text style={styles.shopHours}>Hours: 8:00 AM - 9:00 PM</Text>
             </View>
-
-            {/* Right service icon */}
-            <Ionicons name="bicycle" size={22} color="#000" margin-left="10px" />
-            <Ionicons name="cube" size={22} color="#000" />
+            <Ionicons name="bicycle" size={ms(22)} color="#000" />
+            <Ionicons name="cube" size={ms(22)} color="#000" style={{ marginLeft: s(5) }} />
           </TouchableOpacity>
         )}
       />
@@ -213,66 +255,18 @@ const focusOnShop = (shop: any) => {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = ScaledSheet.create({
   container: { flex: 1, backgroundColor: "white" },
-  headerBox: {
-    width: "100%",
-    height: screenHeight * 0.15,
-    backgroundColor: "#0AADFF",
-    paddingTop: screenHeight * 0.05,
-    justifyContent: "center",
-    overflow: "hidden",
-  },
+  headerBox: { width: "100%", height: mvs(120), backgroundColor: "#0AADFF", justifyContent: "center", overflow: "hidden" },
   waveTop: { position: "absolute", top: 0, left: 0, zIndex: 1 },
-  headerContent: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    zIndex: 2,
-  },
-  headerTitle: { fontSize: 18, fontWeight: "bold", color: "white", textAlign: "center" },
-
-  mapContainer: {
-    width: "100%",
-    height: screenHeight * 0.35,
-    marginBottom: 10,
-    position: "relative",
-  },
-  map: { width: "100%", height: "100%" },
-  gpsButton: {
-    position: "absolute",
-    bottom: 15,
-    right: 15,
-    backgroundColor: "#3864C3",
-    padding: 12,
-    borderRadius: 50,
-    elevation: 6,
-    shadowColor: "#000",
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-  },
-
-  shopList: { flex: 1, marginTop: 10 },
-  shopCard: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: "white",
-    padding: 15,
-    borderBottomWidth: 1,
-    borderColor: "#ddd",
-  },
-  leftIcons: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  shopInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  shopName: { fontSize: 16, fontWeight: "bold" },
-  shopCity: { fontSize: 14, color: "gray" },
-  shopHours: { fontSize: 12, color: "gray" },
+  headerContent: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: s(20), zIndex: 2 },
+  headerTitle: { fontSize: ms(18), fontWeight: "bold", color: "white", textAlign: "center" },
+  mapContainer: { width: "100%", height: mvs(250), position: "relative" },
+  gpsButton: { position: "absolute", bottom: mvs(15), right: s(15), backgroundColor: "#3864C3", padding: s(12), borderRadius: ms(50), elevation: 6 },
+  shopCard: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: "white", padding: mvs(12), borderBottomWidth: 1, borderColor: "#ddd" },
+  leftIcons: { flexDirection: "row", alignItems: "center" },
+  shopInfo: { flex: 1, marginLeft: s(12) },
+  shopName: { fontSize: ms(16), fontWeight: "bold" },
+  shopCity: { fontSize: ms(14), color: "gray" },
+  shopHours: { fontSize: ms(12), color: "gray" },
 });

@@ -2,18 +2,16 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React from "react";
 import {
-    Dimensions,
-    Image,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Image,
+  SafeAreaView,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
+import { ScaledSheet, ms, mvs, s } from "react-native-size-matters";
 import Svg, { Path } from "react-native-svg";
 
-const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
 const vbW = 1440;
 const vbH = 320;
 
@@ -24,8 +22,8 @@ export default function FoldOnly() {
       {/* Header */}
       <View style={styles.headerBox}>
         <Svg
-          width={screenWidth}
-          height={screenHeight * 0.4}
+          width="100%"
+          height={mvs(300)}
           viewBox={`0 0 ${vbW} ${vbH}`}
           style={styles.waveTop}
           preserveAspectRatio="none"
@@ -44,95 +42,69 @@ export default function FoldOnly() {
 
         <View style={styles.headerContent}>
           <TouchableOpacity onPress={() => router.push("/shop/1")}>
-            <Ionicons name="arrow-back" size={24} color="white" />
+            <Ionicons name="arrow-back" size={ms(24)} color="white" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>(BRAND) LAUNDRY SHOP</Text>
-          <View style={{ width: 24 }} />
+          <View style={{ width: s(24) }} />
         </View>
       </View>
 
       {/* Fold Only Info Bar */}
-      <View
-        style={{
-          flexDirection: "row",
-          backgroundColor: "#B3DAFE",
-          paddingTop: 38,
-          paddingBottom: 49,
-          paddingHorizontal: 20,
-        }}
-      >
-        {/* Text description section */}
-        <View style={{ marginRight: 25 }}>
-          <Text
-            style={{
-              color: "#092B75",
-              fontSize: 36,
-              fontWeight: "bold",
-              marginBottom: 9,
-              marginHorizontal: 7,
-            }}
-          >
-            {"Fold Only"}
-          </Text>
-          <Text
-            style={{
-              color: "#092B75",
-              fontSize: 16,
-              marginHorizontal: 5,
-              width: 223,
-            }}
-          >
-            {"This Folding Service is for laundry that is already washed and dried"}
+      <View style={styles.infoBar}>
+        <View style={{ flex: 1, marginRight: s(10) }}>
+          <Text style={styles.infoTitle}>Fold Only</Text>
+          <Text style={styles.infoDescription}>
+            This Folding Service is for laundry that is already washed and dried
           </Text>
         </View>
 
         {/* Icon image on right side */}
-        <Image
-          source={{
-            uri: "https://figma-alpha-api.s3.us-west-2.amazonaws.com/images/1218c948-ff98-4eae-8a0c-49a3d5ed75cd",
-          }}
-          resizeMode="stretch"
-          style={{
-            width: 88,
-            height: 88,
-          }}
-        />
+        <View style={{ flexShrink: 0, justifyContent: "center", alignItems: "flex-end" }}>
+          <Image
+            source={{
+              uri: "https://figma-alpha-api.s3.us-west-2.amazonaws.com/images/1218c948-ff98-4eae-8a0c-49a3d5ed75cd",
+            }}
+            resizeMode="contain"
+            style={{
+              width: s(88),
+              height: s(88),
+              maxWidth: s(88),
+              maxHeight: s(88),
+            }}
+          />
+        </View>
       </View>
 
       {/* Scrollable Pricelist Section */}
       <View style={{ flex: 1 }}>
         <ScrollView
-          contentContainerStyle={{ paddingBottom: 120 }}
+          contentContainerStyle={{ paddingBottom: mvs(120) }}
           style={{ flex: 1, backgroundColor: "white" }}
           bounces={false}
           overScrollMode="never"
           alwaysBounceVertical={false}
           showsVerticalScrollIndicator={true}
         >
-          {/* Pricelist Section */}
           <View style={styles.pricelistSection}>
             <Text style={styles.pricelistTitle}>Pricelist (Price Per KG)</Text>
 
             <View style={styles.pricelistItemRow}>
               <Text style={styles.pricelistItemDescription}>
-                Up to 6 KG {"\n"}Light and dark clothes folded neatly after
-                washing.
+                Up to 6 KG {"\n"}Light and dark clothes folded neatly after washing.
               </Text>
               <Text style={styles.pricelistItemPrice}>₱240</Text>
             </View>
 
             <View style={styles.pricelistItemRow}>
               <Text style={styles.pricelistItemDescription}>
-                Up to 12 KG {"\n"}Clothes are folded neatly after being washed
-                and dried.
+                Up to 12 KG {"\n"}Clothes are folded neatly after being washed and dried.
               </Text>
               <Text style={styles.pricelistItemPrice}>₱540</Text>
             </View>
 
             <View style={styles.pricelistItemRowAlt}>
               <Text style={styles.pricelistItemDescription}>
-                Each Additional 1 KG {"\n"}Extra folding charged per kilogram
-                beyond the first load.
+                Each Additional 1 KG {"\n"}Extra folding charged per kilogram beyond the first load.
               </Text>
               <Text style={styles.pricelistItemPriceAlt}>₱45</Text>
             </View>
@@ -143,14 +115,14 @@ export default function FoldOnly() {
         <View style={styles.fixedBottomBar}>
           <TouchableOpacity
             style={styles.buttonPrimary}
-            onPress={() => alert("Drop Off Pressed!")}
+            onPress={() => router.push("/qrscan")}
           >
             <Text style={styles.buttonText}>Drop Off</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.buttonPrimary}
-            onPress={() => alert("Pickup Pressed!")}
+            onPress={() => router.push("/deliveryonly")}
           >
             <Text style={styles.buttonText}>Pick Up & Delivery</Text>
           </TouchableOpacity>
@@ -160,71 +132,64 @@ export default function FoldOnly() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
-  },
-  scrollView: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
-  },
+const styles = ScaledSheet.create({
+  safeArea: { flex: 1, backgroundColor: "#FFFFFF" },
   pricelistSection: {
     backgroundColor: "#FFFFFF",
-    paddingTop: 36,
-    paddingBottom: 1,
+    paddingTop: mvs(20),
+    paddingBottom: mvs(5),
   },
   pricelistTitle: {
     color: "#000000",
-    fontSize: 24,
+    fontSize: ms(22),
     fontWeight: "bold",
-    marginBottom: 19,
-    marginLeft: 17,
-    marginRight: 136,
+    marginBottom: mvs(10),
+    marginLeft: s(15),
+    marginRight: s(60),
   },
   pricelistItemRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 30,
-    marginHorizontal: 16,
+    marginBottom: mvs(15),
+    marginHorizontal: s(16),
   },
   pricelistItemRowAlt: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 46,
-    marginHorizontal: 16,
+    marginBottom: mvs(25),
+    marginHorizontal: s(16),
   },
   pricelistItemDescription: {
     color: "#000000",
-    fontSize: 16,
-    marginRight: 4,
+    fontSize: ms(16),
+    marginRight: s(4),
     flex: 1,
   },
   pricelistItemPrice: {
     color: "#000000",
-    fontSize: 15,
+    fontSize: ms(15),
     fontWeight: "bold",
     textAlign: "right",
     flex: 1,
   },
   pricelistItemPriceAlt: {
     color: "#000000",
-    fontSize: 15,
+    fontSize: ms(15),
     fontWeight: "bold",
     textAlign: "right",
-    marginTop: 18,
+    marginTop: mvs(8),
     flex: 1,
   },
   buttonPrimary: {
     backgroundColor: "#1939BB",
-    borderRadius: 20,
-    paddingVertical: 8,
-    paddingHorizontal: 30,
+    borderRadius: s(12),
+    paddingVertical: mvs(8),
+    paddingHorizontal: s(30),
   },
   buttonText: {
     color: "#FFFFFF",
-    fontSize: 20,
+    fontSize: ms(18),
     fontWeight: "bold",
   },
   fixedBottomBar: {
@@ -234,14 +199,14 @@ const styles = StyleSheet.create({
     right: 0,
     flexDirection: "row",
     justifyContent: "space-around",
-    paddingVertical: 15,
+    paddingVertical: mvs(15),
     backgroundColor: "#607DFF",
   },
   headerBox: {
     width: "100%",
-    height: screenHeight * 0.15,
+    height: mvs(120),
     backgroundColor: "#0AADFF",
-    paddingTop: screenHeight * 0.05,
+    paddingTop: mvs(40),
     justifyContent: "center",
     overflow: "hidden",
   },
@@ -250,13 +215,34 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 20,
+    paddingHorizontal: s(20),
     zIndex: 2,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: ms(18),
     fontWeight: "bold",
     color: "white",
     textAlign: "center",
+  },
+  infoBar: {
+    flexDirection: "row",
+    backgroundColor: "#B3DAFE",
+    paddingTop: mvs(15),
+    paddingBottom: mvs(15),
+    paddingHorizontal: s(15),
+    alignItems: "center",
+  },
+  infoTitle: {
+    color: "#092B75",
+    fontSize: ms(20),
+    fontWeight: "bold",
+    marginBottom: mvs(5),
+    marginHorizontal: s(5),
+  },
+  infoDescription: {
+    color: "#092B75",
+    fontSize: ms(14),
+    marginHorizontal: s(5),
+    flexShrink: 1,
   },
 });

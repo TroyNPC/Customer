@@ -2,14 +2,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React from "react";
 import {
-    Dimensions,
-    Image,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Dimensions,
+  Image,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import Svg, { Path } from "react-native-svg";
 
@@ -135,14 +135,14 @@ export default function IronOnly() {
         <View style={styles.fixedBottomBar}>
           <TouchableOpacity
             style={styles.buttonPrimary}
-            onPress={() => alert("Drop Off Pressed!")}
+            onPress={() => router.push("/qrscan")}
           >
             <Text style={styles.buttonText}>Drop Off</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.buttonPrimary}
-            onPress={() => alert("Pickup Pressed!")}
+            onPress={() => router.push("/deliveryonly")}
           >
             <Text style={styles.buttonText}>Pick Up & Delivery</Text>
           </TouchableOpacity>
