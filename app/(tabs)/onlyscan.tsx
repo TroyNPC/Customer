@@ -1,4 +1,5 @@
-import { Camera, CameraView } from "expo-camera";
+import { Ionicons } from "@expo/vector-icons";
+import { Camera, CameraView } from 'expo-camera';
 import { Stack, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -8,28 +9,27 @@ import {
   StatusBar,
   StyleSheet,
   Text,
-  View
+  TouchableOpacity,
+  View,
 } from "react-native";
-import { ScaledSheet, verticalScale } from "react-native-size-matters";
+import { ScaledSheet, ms, mvs, s } from "react-native-size-matters";
 import Svg, { Path } from "react-native-svg";
 
 const vbW = 1440;
 const vbH = 320;
 
-export default function deliveryonly() {
+export default function qrscan() {
   const router = useRouter();
   const [permission, setPermission] = useState<any>(null);
   const qrLock = useRef(false);
   const appState = useRef(AppState.currentState);
 
   useEffect(() => {
-    // Request permission when mounted
     (async () => {
       const { status } = await Camera.requestCameraPermissionsAsync();
       setPermission({ granted: status === "granted" });
     })();
 
-    // Reset lock when app comes back to foreground
     const subscription = AppState.addEventListener("change", (nextAppState) => {
       if (
         appState.current.match(/inactive|background/) &&
@@ -64,24 +64,35 @@ export default function deliveryonly() {
       <Stack.Screen options={{ headerShown: false }} />
       {Platform.OS === "android" ? <StatusBar hidden /> : null}
 
-      {/* ===== Top Wave ===== */}
-      <Svg
-        width="100%"
-        height={verticalScale(300)}
-        viewBox={`0 0 ${vbW} ${vbH}`}
-        style={styles.topWave}
-        preserveAspectRatio="none"
-      >
-        <Path
-          fill="#355fc7"
-          d={`M0,0 L0,${vbH * 0.3} C ${vbW * 0.3},${vbH * 0.1} ${vbW * 0.6},${vbH * 0.8} ${vbW},${vbH * 0.7} L${vbW},0 Z`}
-        />
-      </Svg>
+      {/* ===== HEADER (Same Design from FoldOnly) ===== */}
+      <View style={styles.headerBox}>
+        <Svg
+          width="100%"
+          height={mvs(300)}
+          viewBox={`0 0 ${vbW} ${vbH}`}
+          style={styles.waveTop}
+          preserveAspectRatio="none"
+        >
+          <Path
+            fill="#3864C3"
+            d={`M0,${vbH * 0.2}
+                C ${vbW * 0.5},${vbH * -0.1} ${vbW * 0.45},${vbH * 0.6} ${vbW},${vbH * 0.2}
+                L${vbW},0
+                L0,0
+                Z`}
+          />
+        </Svg>
 
-      {/* ===== Header ===== */}
-      <Text style={styles.headerText}>Drop Off - Delivery</Text>
+        <View style={styles.headerContent}>
+          <TouchableOpacity onPress={() => router.push("/shop/1")}>
+            <Ionicons name="arrow-back" size={ms(24)} color="white" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Drop Off / Delivery</Text>
+          <View style={{ width: s(24) }} />
+        </View>
+      </View>
 
-      {/* ===== Camera Scanner ===== */}
+      {/* ===== QR CAMERA SCANNER ===== */}
       <View style={styles.scannerBox}>
         <CameraView
           style={StyleSheet.absoluteFillObject}
@@ -90,7 +101,6 @@ export default function deliveryonly() {
             if (data && !qrLock.current) {
               qrLock.current = true;
               setTimeout(() => {
-                // ✅ Navigate to next page after scan
                 router.push("/sendinfoafterqr");
               }, 600);
             }
@@ -99,20 +109,6 @@ export default function deliveryonly() {
       </View>
 
       <Text style={styles.scanningText}>Scanning for QR code...</Text>
-
-      {/* ===== Bottom Wave ===== */}
-      <Svg
-        width="100%"
-        height={verticalScale(120)}
-        viewBox={`0 0 ${vbW} ${vbH}`}
-        style={styles.bottomWave}
-        preserveAspectRatio="none"
-      >
-        <Path
-          fill="#355fc7"
-          d={`M0,${vbH * 0.2} C ${vbW * 0.25},${vbH * 0.9} ${vbW * 0.55},${vbH * -0.2} ${vbW},${vbH * 0.4} L ${vbW},${vbH} L 0,${vbH} Z`}
-        />
-      </Svg>
     </SafeAreaView>
   );
 }
@@ -122,28 +118,32 @@ const styles = ScaledSheet.create({
     flex: 1,
     backgroundColor: "#fff",
   },
-  topWave: {
-    position: "absolute",
-    top: 0,
+  headerBox: {
+    width: "100%",
+    height: mvs(120),
+    backgroundColor: "#0AADFF",
+    paddingTop: mvs(40),
+    justifyContent: "center",
+    overflow: "hidden",
   },
-  bottomWave: {
-    position: "absolute",
-    bottom: 0,
+  waveTop: { position: "absolute", top: 0, left: 0, zIndex: 1 },
+  headerContent: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: s(20),
+    zIndex: 2,
   },
-  headerText: {
-    marginTop: "40@vs",
-    textAlign: "center",
-    fontSize: "22@ms",
+  headerTitle: {
+    fontSize: ms(18),
     fontWeight: "bold",
     color: "white",
-    position: "absolute",
-    top: "30@vs",
-    width: "100%",
+    textAlign: "center",
   },
   scannerBox: {
     flex: 1,
     marginHorizontal: "20@s",
-    marginTop: "140@vs",
+    marginTop: "120@vs",
     marginBottom: "80@vs",
     borderRadius: "20@s",
     overflow: "hidden",
@@ -154,6 +154,7 @@ const styles = ScaledSheet.create({
     fontSize: "18@ms",
     fontWeight: "500",
     marginBottom: "80@vs",
+    color: "#000",
   },
   center: {
     flex: 1,

@@ -3,13 +3,13 @@ import { Picker } from "@react-native-picker/picker";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
-    Alert,
-    SafeAreaView,
-    ScrollView,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  SafeAreaView,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { ScaledSheet, ms, mvs, s } from "react-native-size-matters";
 import Svg, { Path } from "react-native-svg";
@@ -58,7 +58,7 @@ export default function SendDropQRInfo() {
         </Svg>
 
         <View style={styles.headerContent}>
-          <TouchableOpacity onPress={() => router.back()}>
+          <TouchableOpacity onPress={() => router.push('/shop/1')}>
             <Ionicons name="arrow-back" size={ms(25)} color="white" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Drop off & Delivery</Text>

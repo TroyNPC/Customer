@@ -57,7 +57,8 @@ export default function TabLayout() {
       <Tabs.Screen name="shop" options={{ href: null }} />
       <Tabs.Screen name="sendinfoafterqr" options={{ href: null }} />
       <Tabs.Screen name="deliveryonly" options={{ href: null }} />
-      <Tabs.Screen name="qrscan" options={{ href: null }} />
+      <Tabs.Screen name="onlyscan" options={{ href: null }} />
+      <Tabs.Screen name="trackdeliveryboy" options={{ href: null }} />
     </Tabs>
   );
 }

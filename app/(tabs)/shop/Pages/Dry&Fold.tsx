@@ -121,7 +121,7 @@ export default function DryFoldOnly() {
         <View style={styles.fixedBottomBar}>
           <TouchableOpacity
             style={styles.buttonPrimary}
-            onPress={() => router.push("/qrscan")}
+            onPress={() => router.push("/onlyscan")}
           >
             <Text style={styles.buttonText}>Drop Off</Text>
           </TouchableOpacity>

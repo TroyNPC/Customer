@@ -106,7 +106,7 @@ export default function WashOnly() {
 
       {/* Sticky Bottom Buttons */}
       <View style={styles.fixedBottomBar}>
-        <TouchableOpacity style={styles.buttonPrimary} onPress={() => router.push("/shop/qrscan")}>
+        <TouchableOpacity style={styles.buttonPrimary} onPress={() => router.push("/onlyscan")}>
           <Text style={styles.buttonText}>Drop Off</Text>
         </TouchableOpacity>
 
