@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
-import { FlatList, Text, TouchableOpacity, View } from "react-native";
+import { Alert, FlatList, Text, TouchableOpacity, View } from "react-native";
 import { ScaledSheet, ms, mvs, s } from "react-native-size-matters";
 import Svg, { Path } from "react-native-svg";
 import { WebView } from "react-native-webview";
@@ -24,36 +24,36 @@ export default function MapScreen() {
   const [selectedShop, setSelectedShop] = useState<string | null>(null);
   const locationWatcher = useRef<any>(null);
 
+  // Request location immediately & set up initial GPS
   useEffect(() => {
     (async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") return;
-      let currentLocation = await Location.getCurrentPositionAsync({});
-      setLocation({
-        latitude: currentLocation.coords.latitude,
-        longitude: currentLocation.coords.longitude,
-      });
-    })();
-  }, []);
-
-  useEffect(() => {
-    const startTracking = async () => {
-      if (!tracking) {
-        if (locationWatcher.current) {
-          locationWatcher.current.remove();
-          locationWatcher.current = null;
-        }
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission Denied", "Location permission is required to show your position.");
         return;
       }
 
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") return;
+      const currentLocation = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
 
+      const coords = {
+        latitude: currentLocation.coords.latitude,
+        longitude: currentLocation.coords.longitude,
+      };
+      setLocation(coords);
+
+      // Immediately show the user's location on the map
+      webRef.current?.postMessage(
+        JSON.stringify({ action: "setUserLocation", lat: coords.latitude, lng: coords.longitude })
+      );
+
+      // Start watching for live updates
       locationWatcher.current = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.High,
           timeInterval: 3000,
-          distanceInterval: 5,
+          distanceInterval: 2,
         },
         (newLoc) => {
           const newCoords = {
@@ -70,16 +70,21 @@ export default function MapScreen() {
           }
         }
       );
-    };
+    })();
 
-    startTracking();
     return () => {
       if (locationWatcher.current) {
         locationWatcher.current.remove();
         locationWatcher.current = null;
       }
     };
-  }, [tracking, selectedShop]);
+  }, []);
+
+  // Reapply tracking whenever user toggles tracking or shop selection changes
+  useEffect(() => {
+    if (!tracking || !selectedShop || !location) return;
+    webRef.current?.postMessage(JSON.stringify({ action: "focusShop", id: selectedShop, track: true }));
+  }, [tracking, selectedShop, location]);
 
   const leafletHTML = `<!DOCTYPE html>
   <html>
@@ -111,11 +116,7 @@ export default function MapScreen() {
         border-right: 4px solid transparent;
         border-bottom: 8px solid #007bff;
       }
-
-      /* Hide the default routing instruction panel */
-      .leaflet-routing-container {
-        display: none !important;
-      }
+      .leaflet-routing-container { display: none !important; }
     </style>
   </head>
   <body>
@@ -147,7 +148,6 @@ export default function MapScreen() {
         if (el) el.classList.add('highlight-marker');
         activeMarker = markers[id];
 
-        // Draw route without showing instruction panel
         if (window.currentUser) {
           if (routeControl) map.removeControl(routeControl);
           routeControl = L.Routing.control({
@@ -163,7 +163,10 @@ export default function MapScreen() {
       function setUserMarker(lat, lng) {
         const icon = L.divIcon({ className: 'user-marker', iconSize: [24, 24], iconAnchor: [12, 12] });
         if (userMarker) userMarker.setLatLng([lat, lng]);
-        else userMarker = L.marker([lat, lng], { icon }).addTo(map).bindPopup("You are here");
+        else {
+          userMarker = L.marker([lat, lng], { icon }).addTo(map).bindPopup("You are here");
+          map.setView([lat, lng], 15);
+        }
       }
 
       document.addEventListener('message', (event) => {
@@ -189,9 +192,22 @@ export default function MapScreen() {
     }
   };
 
-  const centerOnUser = () => {
-    if (location) {
+  const centerOnUser = async () => {
+    try {
+      const currentLocation = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+      const coords = {
+        latitude: currentLocation.coords.latitude,
+        longitude: currentLocation.coords.longitude,
+      };
+      setLocation(coords);
+      webRef.current?.postMessage(
+        JSON.stringify({ action: "setUserLocation", lat: coords.latitude, lng: coords.longitude })
+      );
       webRef.current?.postMessage(JSON.stringify({ action: "centerUser" }));
+    } catch (err) {
+      console.error("Error getting location:", err);
     }
   };
 

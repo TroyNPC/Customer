@@ -1,16 +1,19 @@
-import { Camera, CameraView } from "expo-camera";
+import { Ionicons } from "@expo/vector-icons";
+import { Picker } from "@react-native-picker/picker"; // ✅ dropdown
 import { Stack, useRouter } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useState } from "react";
 import {
-  AppState,
   Platform,
   SafeAreaView,
+  ScrollView,
   StatusBar,
-  StyleSheet,
   Text,
-  View
+  TextInput,
+  TouchableOpacity,
+  View,
+  useWindowDimensions,
 } from "react-native";
-import { ScaledSheet, verticalScale } from "react-native-size-matters";
+import { ScaledSheet, ms, mvs, s } from "react-native-size-matters";
 import Svg, { Path } from "react-native-svg";
 
 const vbW = 1440;
@@ -18,101 +21,99 @@ const vbH = 320;
 
 export default function deliveryonly() {
   const router = useRouter();
-  const [permission, setPermission] = useState<any>(null);
-  const qrLock = useRef(false);
-  const appState = useRef(AppState.currentState);
+  const { width } = useWindowDimensions(); // ✅ responsiveness
+  const [selectedService, setSelectedService] = useState("");
 
-  useEffect(() => {
-    // Request permission when mounted
-    (async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setPermission({ granted: status === "granted" });
-    })();
-
-    // Reset lock when app comes back to foreground
-    const subscription = AppState.addEventListener("change", (nextAppState) => {
-      if (
-        appState.current.match(/inactive|background/) &&
-        nextAppState === "active"
-      ) {
-        qrLock.current = false;
-      }
-      appState.current = nextAppState;
-    });
-
-    return () => subscription.remove();
-  }, [permission]);
-
-  if (!permission) {
-    return (
-      <View style={styles.center}>
-        <Text>Requesting for camera permission...</Text>
-      </View>
-    );
-  }
-
-  if (!permission.granted) {
-    return (
-      <View style={styles.center}>
-        <Text>No access to camera. Please enable it in settings.</Text>
-      </View>
-    );
-  }
+  const services = [
+    "Bulk",
+    "Dry & Fold",
+    "Dry Only",
+    "Fold Only",
+    "Iron Only",
+    "Wash Dry Fold",
+    "Wash Only",
+  ];
 
   return (
     <SafeAreaView style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
       {Platform.OS === "android" ? <StatusBar hidden /> : null}
 
-      {/* ===== Top Wave ===== */}
-      <Svg
-        width="100%"
-        height={verticalScale(300)}
-        viewBox={`0 0 ${vbW} ${vbH}`}
-        style={styles.topWave}
-        preserveAspectRatio="none"
-      >
-        <Path
-          fill="#355fc7"
-          d={`M0,0 L0,${vbH * 0.3} C ${vbW * 0.3},${vbH * 0.1} ${vbW * 0.6},${vbH * 0.8} ${vbW},${vbH * 0.7} L${vbW},0 Z`}
-        />
-      </Svg>
-
       {/* ===== Header ===== */}
-      <Text style={styles.headerText}>Drop Off - Delivery</Text>
+      <View style={[styles.headerBox, { height: width * 0.25 }]}>
+        <Svg
+          width="100%"
+          height={mvs(300)}
+          viewBox={`0 0 ${vbW} ${vbH}`}
+          style={styles.waveTop}
+          preserveAspectRatio="none"
+        >
+          <Path
+            fill="#3864C3"
+            d={`M0,${vbH * 0.2}
+              C ${vbW * 0.5},${vbH * -0.1} ${vbW * 0.45},${vbH * 0.6} ${vbW},${vbH * 0.2}
+              L${vbW},0
+              L0,0
+              Z`}
+          />
+        </Svg>
 
-      {/* ===== Camera Scanner ===== */}
-      <View style={styles.scannerBox}>
-        <CameraView
-          style={StyleSheet.absoluteFillObject}
-          facing="back"
-          onBarcodeScanned={({ data }) => {
-            if (data && !qrLock.current) {
-              qrLock.current = true;
-              setTimeout(() => {
-                // ✅ Navigate to next page after scan
-                router.push("/sendinfoafterqr");
-              }, 600);
-            }
-          }}
-        />
+        <View style={styles.headerContent}>
+          <TouchableOpacity onPress={() => router.push("/shop/1")}>
+            <Ionicons name="arrow-back" size={ms(24)} color="white" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Pick Up & Delivery</Text>
+          <View style={{ width: s(24) }} />
+        </View>
       </View>
 
-      <Text style={styles.scanningText}>Scanning for QR code...</Text>
-
-      {/* ===== Bottom Wave ===== */}
-      <Svg
-        width="100%"
-        height={verticalScale(120)}
-        viewBox={`0 0 ${vbW} ${vbH}`}
-        style={styles.bottomWave}
-        preserveAspectRatio="none"
-      >
-        <Path
-          fill="#355fc7"
-          d={`M0,${vbH * 0.2} C ${vbW * 0.25},${vbH * 0.9} ${vbW * 0.55},${vbH * -0.2} ${vbW},${vbH * 0.4} L ${vbW},${vbH} L 0,${vbH} Z`}
+      {/* ===== Delivery Info Form ===== */}
+      <ScrollView contentContainerStyle={[styles.formContainer, { flexGrow: 1 }]}>
+        <Text style={styles.label}>Name:</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Enter name"
+          placeholderTextColor="#777"
         />
-      </Svg>
+
+        <Text style={styles.label}>Location:</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Enter location"
+          placeholderTextColor="#777"
+        />
+
+        <Text style={styles.label}>Number:</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Enter contact number"
+          keyboardType="phone-pad"
+          placeholderTextColor="#777"
+        />
+
+        <Text style={styles.label}>Type of Service:</Text>
+        <View style={styles.pickerContainer}>
+          <Picker
+            selectedValue={selectedService}
+            onValueChange={(itemValue) => setSelectedService(itemValue)}
+            style={styles.picker}
+            dropdownIconColor="#3864C3"
+          >
+            <Picker.Item label="Select a service" value="" />
+            {services.map((service, index) => (
+              <Picker.Item key={index} label={service} value={service} />
+            ))}
+          </Picker>
+        </View>
+
+        {/* ===== Submit Button ===== */}
+        <TouchableOpacity
+          style={styles.submitButton}
+          onPress={() => console.log("Submitted:", selectedService)}
+        >
+          <Text style={styles.submitButtonText}>Submit</Text>
+        </TouchableOpacity>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -122,42 +123,74 @@ const styles = ScaledSheet.create({
     flex: 1,
     backgroundColor: "#fff",
   },
-  topWave: {
+  headerBox: {
+    width: "100%",
+    minHeight: mvs(120),
+    backgroundColor: "#0AADFF",
+    paddingTop: mvs(40),
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  waveTop: {
     position: "absolute",
     top: 0,
   },
-  bottomWave: {
-    position: "absolute",
-    bottom: 0,
-  },
-  headerText: {
-    marginTop: "40@vs",
-    textAlign: "center",
-    fontSize: "22@ms",
-    fontWeight: "bold",
-    color: "white",
-    position: "absolute",
-    top: "30@vs",
-    width: "100%",
-  },
-  scannerBox: {
-    flex: 1,
-    marginHorizontal: "20@s",
-    marginTop: "140@vs",
-    marginBottom: "80@vs",
-    borderRadius: "20@s",
-    overflow: "hidden",
-    backgroundColor: "#000",
-  },
-  scanningText: {
-    textAlign: "center",
-    fontSize: "18@ms",
-    fontWeight: "500",
-    marginBottom: "80@vs",
-  },
-  center: {
-    flex: 1,
-    justifyContent: "center",
+  headerContent: {
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: s(20),
+  },
+  headerTitle: {
+    fontSize: ms(16),
+    color: "#fff",
+    fontWeight: "bold",
+  },
+  formContainer: {
+    marginTop: mvs(50),
+    paddingHorizontal: s(24),
+    paddingBottom: mvs(100),
+  },
+  label: {
+    fontSize: ms(14),
+    fontWeight: "bold",
+    color: "#000",
+    marginBottom: mvs(6),
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: s(10),
+    paddingVertical: mvs(10),
+    paddingHorizontal: s(12),
+    fontSize: ms(13),
+    marginBottom: mvs(16),
+    color: "#000",
+    backgroundColor: "#F8F8F8",
+  },
+  pickerContainer: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: s(10),
+    marginBottom: mvs(16),
+    backgroundColor: "#F8F8F8",
+    overflow: "hidden",
+  },
+  picker: {
+    width: "100%",
+    color: "#000",
+  },
+  submitButton: {
+    backgroundColor: "#3864C3",
+    borderRadius: s(10),
+    paddingVertical: mvs(12),
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: mvs(10),
+  },
+  submitButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: ms(14),
   },
 });

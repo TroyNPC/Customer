@@ -2,18 +2,18 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React from "react";
 import {
-    Image,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Image,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import {
-    moderateScale,
-    scale,
-    verticalScale,
+  moderateScale,
+  scale,
+  verticalScale,
 } from "react-native-size-matters";
 import Svg, { Path } from "react-native-svg";
 

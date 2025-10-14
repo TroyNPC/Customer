@@ -1,12 +1,13 @@
 // TrackDriver.tsx
 import { Ionicons } from "@expo/vector-icons";
+import * as Location from "expo-location";
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
-    SafeAreaView,
-    Text,
-    TouchableOpacity,
-    View,
+  SafeAreaView,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { ScaledSheet, ms, mvs, s } from "react-native-size-matters";
 import Svg, { Path } from "react-native-svg";
@@ -17,8 +18,26 @@ const vbH = 320;
 
 export default function TrackDriver(): JSX.Element {
   const router = useRouter();
+  const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
 
-  const leafletHTML = `
+  useEffect(() => {
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        console.log("Permission to access location was denied");
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({});
+      setUserCoords({
+        lat: location.coords.latitude,
+        lng: location.coords.longitude,
+      });
+    })();
+  }, []);
+
+  const leafletHTML = userCoords
+    ? `
   <!DOCTYPE html>
   <html>
     <head>
@@ -32,7 +51,7 @@ export default function TrackDriver(): JSX.Element {
     <body>
       <div id="map"></div>
       <script>
-        const userLatLng = [9.3065, 123.307];
+        const userLatLng = [${userCoords.lat}, ${userCoords.lng}];
         const driverLatLng = [9.316, 123.298];
 
         const map = L.map('map').setView(userLatLng, 13);
@@ -50,7 +69,6 @@ export default function TrackDriver(): JSX.Element {
         const userMarker = L.marker(userLatLng).addTo(map).bindPopup('You are here');
         const driverMarker = L.marker(driverLatLng, { icon: driverIcon }).addTo(map).bindPopup('Delivery Boy');
 
-        // Fetch the driving route using OSRM (free public API)
         const url = \`https://router.project-osrm.org/route/v1/driving/\${driverLatLng[1]},\${driverLatLng[0]};\${userLatLng[1]},\${userLatLng[0]}?overview=full&geometries=geojson\`;
 
         fetch(url)
@@ -65,7 +83,8 @@ export default function TrackDriver(): JSX.Element {
       </script>
     </body>
   </html>
-  `;
+  `
+    : `<html><body><p style="text-align:center;margin-top:50%">Fetching location...</p></body></html>`;
 
   return (
     <SafeAreaView style={styles.safeArea}>

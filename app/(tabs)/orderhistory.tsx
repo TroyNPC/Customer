@@ -137,7 +137,10 @@ export default function OrderHistory() {
                     <Text style={styles.shopText}>
                       Laundry Shop : {order.shop}
                     </Text>
-                    <TouchableOpacity style={styles.trackButton}>
+                    <TouchableOpacity
+                        style={styles.trackButton}
+                        onPress={() => router.push("/trackdeliveryboy")}
+                      >
                       <Text style={styles.trackButtonText}>
                         Track Driver Location
                       </Text>
