@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Picker } from "@react-native-picker/picker";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   Alert,
   SafeAreaView,
@@ -25,9 +25,10 @@ export default function SendDropQRInfo() {
   const [location, setLocation] = useState("");
   const [service, setService] = useState("");
   const [detergent, setDetergent] = useState("");
+  const [refreshener, setRefreshener] = useState("");
 
-  const handleSend = () => {
-    if (!name || !contact || !location || !service || !detergent) {
+  const handleSend = useCallback(() => {
+    if (!name || !contact || !location || !service || !detergent || !refreshener) {
       Alert.alert("Missing Info", "Please fill out all fields.");
       return;
     }
@@ -38,7 +39,20 @@ export default function SendDropQRInfo() {
         onPress: () => router.push("/map"),
       },
     ]);
-  };
+  }, [name, contact, location, service, detergent, refreshener, router]);
+
+  const services = [
+    "Bulk",
+    "Dry & Fold",
+    "Dry Only",
+    "Fold Only",
+    "Iron Only",
+    "Wash Dry Fold",
+    "Wash Only",
+  ];
+
+  const detergents = ["Tide", "Ariel", "Surf", "Downy", "Breeze", "Pride"];
+  const refresheners = ["Downy", "Comfort", "Sta-Soft", "Del", "Hygienix"];
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -58,7 +72,7 @@ export default function SendDropQRInfo() {
         </Svg>
 
         <View style={styles.headerContent}>
-          <TouchableOpacity onPress={() => router.push('/shop/1')}>
+          <TouchableOpacity activeOpacity={0.7} onPress={() => router.push("/shop/1")}>
             <Ionicons name="arrow-back" size={ms(25)} color="white" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Drop off & Delivery</Text>
@@ -68,6 +82,7 @@ export default function SendDropQRInfo() {
 
       {/* Scrollable Form */}
       <ScrollView
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingBottom: mvs(80) }}
         style={{ flex: 1, backgroundColor: "white" }}
         showsVerticalScrollIndicator={false}
@@ -77,25 +92,28 @@ export default function SendDropQRInfo() {
           <TextInput
             style={styles.input}
             placeholder="Enter Name"
+            placeholderTextColor="#000"
             value={name}
-            onChangeText={setName}
+            onChangeText={(text) => setName(text)}
           />
 
           <Text style={styles.label}>Contact Information</Text>
           <TextInput
             style={styles.input}
             placeholder="Enter Contact Number"
+            placeholderTextColor="#000"
             keyboardType="phone-pad"
             value={contact}
-            onChangeText={setContact}
+            onChangeText={(text) => setContact(text)}
           />
 
           <Text style={styles.label}>Location</Text>
           <TextInput
             style={styles.input}
             placeholder="Enter Location"
+            placeholderTextColor="#000"
             value={location}
-            onChangeText={setLocation}
+            onChangeText={(text) => setLocation(text)}
           />
 
           <Text style={styles.label}>Select Preferred Service</Text>
@@ -105,31 +123,43 @@ export default function SendDropQRInfo() {
               onValueChange={(itemValue) => setService(itemValue)}
             >
               <Picker.Item label="Select Preferred Service" value="" />
-              <Picker.Item label="Bulk Laundry" value="Bulk Laundry" />
-              <Picker.Item label="Wash" value="Wash" />
-              <Picker.Item label="Dry & Fold Only" value="Dry & Fold Only" />
-              <Picker.Item label="Wash Only" value="Wash Only" />
-              <Picker.Item label="Fold Only" value="Fold Only" />
-              <Picker.Item label="Dry Only" value="Dry Only" />
-              <Picker.Item label="Iron Only" value="Iron Only" />
+              {services.map((srv, index) => (
+                <Picker.Item key={index} label={srv} value={srv} />
+              ))}
             </Picker>
           </View>
 
-          <Text style={styles.label}>Select Preferred Detergent</Text>
+          <Text style={styles.label}>Select Type of Detergent</Text>
           <View style={styles.pickerContainer}>
             <Picker
               selectedValue={detergent}
               onValueChange={(itemValue) => setDetergent(itemValue)}
             >
-              <Picker.Item label="Select Preferred Detergent" value="" />
-              <Picker.Item label="Tide" value="Tide" />
-              <Picker.Item label="Ariel" value="Ariel" />
-              <Picker.Item label="Surf" value="Surf" />
-              <Picker.Item label="Downy" value="Downy" />
+              <Picker.Item label="Select Type of Detergent" value="" />
+              {detergents.map((det, index) => (
+                <Picker.Item key={index} label={det} value={det} />
+              ))}
             </Picker>
           </View>
 
-          <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
+          <Text style={styles.label}>Select Type of Refreshener</Text>
+          <View style={styles.pickerContainer}>
+            <Picker
+              selectedValue={refreshener}
+              onValueChange={(itemValue) => setRefreshener(itemValue)}
+            >
+              <Picker.Item label="Select Type of Refreshener" value="" />
+              {refresheners.map((ref, index) => (
+                <Picker.Item key={index} label={ref} value={ref} />
+              ))}
+            </Picker>
+          </View>
+
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={styles.sendButton}
+            onPress={handleSend}
+          >
             <Text style={styles.sendButtonText}>Send</Text>
           </TouchableOpacity>
         </View>
@@ -179,17 +209,18 @@ const styles = ScaledSheet.create({
     borderWidth: 1,
     borderColor: "#B3B3B3",
     borderRadius: s(8),
-    paddingVertical: mvs(10),
-    paddingHorizontal: s(12),
-    fontSize: ms(14),
+    paddingVertical: 10, // ✅ static value avoids lag
+    paddingHorizontal: 12,
+    fontSize: 14,
     backgroundColor: "#F7F7F7",
-    marginTop: mvs(5),
+    marginTop: 6,
+    color: "#000",
   },
   pickerContainer: {
     borderWidth: 1,
     borderColor: "#B3B3B3",
     borderRadius: s(8),
-    marginTop: mvs(5),
+    marginTop: 6,
     backgroundColor: "#F7F7F7",
   },
   sendButton: {
@@ -197,7 +228,7 @@ const styles = ScaledSheet.create({
     borderRadius: s(12),
     marginTop: mvs(30),
     alignItems: "center",
-    paddingVertical: mvs(12),
+    paddingVertical: 12,
   },
   sendButtonText: {
     color: "#FFFFFF",
