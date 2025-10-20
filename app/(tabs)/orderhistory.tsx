@@ -43,6 +43,8 @@ interface Order {
   customer_name: string | null;
   customer_contact: string | null;
   delivery_location: string | null;
+  lat: number | null;
+  lng: number | null;
   service_id: string | null;
   detergent_id: string | null;
   softener_id: string | null;
@@ -91,6 +93,8 @@ interface OrderHistory {
   customer_name: string;
   customer_contact: string;
   delivery_location: string | null;
+  lat: number | null;
+  lng: number | null;
   method_id: string;
   method_code: string;
   method_label: string;
@@ -404,9 +408,6 @@ export default function OrderHistory() {
           </Svg>
 
           <View style={styles.headerContent}>
-            <TouchableOpacity onPress={() => router.back()}>
-              <Ionicons name="arrow-back" size={ms(24)} color="white" />
-            </TouchableOpacity>
             <Text style={styles.headerTitle}>Order History</Text>
             <View style={{ width: s(24) }} />
           </View>
@@ -481,9 +482,6 @@ export default function OrderHistory() {
             />
           </Svg>
           <View style={styles.headerContent}>
-            <TouchableOpacity onPress={() => router.back()}>
-              <Ionicons name="arrow-back" size={ms(24)} color="white" />
-            </TouchableOpacity>
             <Text style={styles.headerTitle}>Order History</Text>
             <View style={{ width: s(24) }} />
           </View>
@@ -521,9 +519,6 @@ export default function OrderHistory() {
         </Svg>
 
         <View style={styles.headerContent}>
-          <TouchableOpacity onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={ms(24)} color="white" />
-          </TouchableOpacity>
           <Text style={styles.headerTitle}>Order History</Text>
           <View style={{ width: s(24) }} />
         </View>
@@ -706,21 +701,26 @@ const styles = ScaledSheet.create({
     backgroundColor: "#0AADFF",
     paddingTop: mvs(40),
     justifyContent: "center",
+    alignItems: "center", // Add this to center content
     overflow: "hidden",
   },
   waveTop: { position: "absolute", top: 0, left: 0, zIndex: 1 },
-  headerContent: {
+   headerContent: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "center", // Center the content
     alignItems: "center",
     paddingHorizontal: s(20),
     zIndex: 2,
+    width: "100%", // Take full width
   },
   headerTitle: {
-    fontSize: ms(18),
+    fontSize: ms(20),
     fontWeight: "bold",
     color: "white",
     textAlign: "center",
+    position: "absolute", // This ensures true centering
+    left: 0,
+    right: 0,
   },
   loadingContainer: {
     flex: 1,

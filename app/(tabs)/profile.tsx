@@ -1,8 +1,8 @@
 import { useAuth } from "@/hooks/useAuth";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   SafeAreaView,
@@ -29,57 +29,77 @@ interface UserProfile {
 export default function Profile() {
   const router = useRouter();
   const { width, height } = useWindowDimensions();
-  const { logout, guest, loggedIn, user } = useAuth();
+  const { logout, guest, loggedIn, user, isLoading } = useAuth();
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [profileLoading, setProfileLoading] = useState(true);
 
-  // Fetch user profile data when user is logged in
+  // Function to fetch user profile
+  const fetchUserProfile = useCallback(async () => {
+    // If user is not logged in or is guest, clear profile data
+    if (!loggedIn || guest || !user) {
+      setUserProfile(null);
+      setProfileLoading(false);
+      return;
+    }
+
+    try {
+      setProfileLoading(true);
+      console.log('Fetching profile for user:', user.id);
+      
+      const { data, error } = await supabaseClient
+        .from('users')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      if (error) {
+        console.error('Error fetching user profile:', error);
+        // If no profile exists, create a basic one from auth data
+        setUserProfile({
+          id: user.id,
+          full_name: user.user_metadata?.full_name || 'User',
+          email: user.email || '',
+          phone: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+      } else {
+        console.log('User profile found:', data);
+        setUserProfile(data);
+      }
+    } catch (error) {
+      console.error('Error in fetchUserProfile:', error);
+    } finally {
+      setProfileLoading(false);
+    }
+  }, [user, guest, loggedIn]);
+
+  // Fetch user profile when component mounts or dependencies change
   useEffect(() => {
-    const fetchUserProfile = async () => {
-      if (!user || guest) {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        setLoading(true);
-        console.log('Fetching profile for user:', user.id);
-        
-        const { data, error } = await supabaseClient
-          .from('users')
-          .select('*')
-          .eq('id', user.id)
-          .single();
-
-        if (error) {
-          console.error('Error fetching user profile:', error);
-          // If no profile exists, create a basic one from auth data
-          setUserProfile({
-            id: user.id,
-            full_name: user.user_metadata?.full_name || 'User',
-            email: user.email || '',
-            phone: null,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          });
-        } else {
-          console.log('User profile found:', data);
-          setUserProfile(data);
-        }
-      } catch (error) {
-        console.error('Error in fetchUserProfile:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchUserProfile();
-  }, [user, guest]);
+  }, [fetchUserProfile]);
 
-  // Use the auth hook state instead of URL params
-  const isGuest = guest;
+  // Refresh profile data when screen comes into focus (after returning from edit)
+  useFocusEffect(
+    useCallback(() => {
+      fetchUserProfile();
+    }, [fetchUserProfile])
+  );
 
-  if (loading) {
+  const handleLogout = async () => {
+    try {
+      await logout();
+      // Clear local profile state
+      setUserProfile(null);
+      // Navigate to home
+      router.replace("/");
+    } catch (error) {
+      console.error('Error during logout:', error);
+    }
+  };
+
+  // Show loading if auth is still loading
+  if (isLoading) {
     return (
       <SafeAreaView style={[styles.container, { minHeight: height }]}>
         <View style={[styles.headerBox, { height: verticalScale(100) }]}>
@@ -96,16 +116,19 @@ export default function Profile() {
             />
           </Svg>
           <View style={styles.headerContent}>
-            <Text style={styles.headerTitle}>PROFILE</Text>
+            <Text style={styles.headerTitle}>Profile</Text>
           </View>
         </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#3864C3" />
-          <Text style={styles.loadingText}>Loading profile...</Text>
+          <Text style={styles.loadingText}>Loading...</Text>
         </View>
       </SafeAreaView>
     );
   }
+
+  // Show guest view if not logged in or is guest
+  const showGuestView = !loggedIn || guest;
 
   return (
     <SafeAreaView style={[styles.container, { minHeight: height }]}>
@@ -136,7 +159,7 @@ export default function Profile() {
               { fontSize: moderateScale(width < 360 ? 18 : 22) },
             ]}
           >
-            {isGuest ? "PROFILE" : "PROFILE"}
+            Profile
           </Text>
         </View>
       </View>
@@ -150,7 +173,7 @@ export default function Profile() {
         }}
         showsVerticalScrollIndicator={false}
       >
-        {isGuest ? (
+        {showGuestView ? (
           // ✅ Guest view - Show login prompt
           <View style={styles.guestContainer}>
             <Ionicons
@@ -190,76 +213,63 @@ export default function Profile() {
         ) : (
           // ✅ Logged-in view with real user data
           <>
-            <View style={styles.profileContainer}>
-              <Ionicons
-                name="person-circle"
-                size={moderateScale(90)}
-                color="#3864C3"
-                style={{ marginBottom: verticalScale(10) }}
-              />
-              <Text style={styles.profileName}>
-                {userProfile?.full_name || 'User'}
-              </Text>
-              <Text style={styles.profileRole}>Customer</Text>
-              {userProfile?.phone && (
-                <Text style={styles.profileNumber}>{userProfile.phone}</Text>
-              )}
-              <Text style={styles.profileEmail}>
-                {userProfile?.email || user?.email || 'No email provided'}
-              </Text>
+            {profileLoading ? (
+              <View style={styles.profileLoadingContainer}>
+                <ActivityIndicator size="large" color="#3864C3" />
+                <Text style={styles.loadingText}>Loading profile...</Text>
+              </View>
+            ) : (
+              <>
+                <View style={styles.profileContainer}>
+                  <Ionicons
+                    name="person-circle"
+                    size={moderateScale(90)}
+                    color="#3864C3"
+                    style={{ marginBottom: verticalScale(10) }}
+                  />
+                  <Text style={styles.profileName}>
+                    {userProfile?.full_name || 'User'}
+                  </Text>
+                  <Text style={styles.profileRole}>Customer</Text>
+                  {userProfile?.phone && (
+                    <Text style={styles.profileNumber}>{userProfile.phone}</Text>
+                  )}
+                  <Text style={styles.profileEmail}>
+                    {userProfile?.email || user?.email || 'No email provided'}
+                  </Text>
 
-              <TouchableOpacity
-                activeOpacity={0.8}
-                style={styles.logoutButton}
-                onPress={() => {
-                  logout();
-                  router.replace("/");
-                }}
-              >
-                <Text style={styles.logoutText}>LOG OUT</Text>
-              </TouchableOpacity>
-            </View>
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    style={styles.logoutButton}
+                    onPress={handleLogout}
+                  >
+                    <Text style={styles.logoutText}>LOG OUT</Text>
+                  </TouchableOpacity>
+                </View>
 
-            {/* Menu */}
-            <View style={styles.menuContainer}>
-              <TouchableOpacity
-                style={styles.menuItem}
-                activeOpacity={0.7}
-                onPress={() => router.push("/(tabs)/editprofile")}
-              >
-                <Ionicons
-                  name="person-outline"
-                  size={moderateScale(18)}
-                  color="#000"
-                />
-                <Text style={styles.menuText}>Edit Profile</Text>
-                <Ionicons
-                  name="chevron-forward"
-                  size={moderateScale(18)}
-                  color="#888"
-                  style={{ marginLeft: "auto" }}
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.menuItem}
-                activeOpacity={0.7}
-                onPress={() => router.push("/(tabs)/changepassword")}
-              >
-                <Ionicons
-                  name="lock-closed-outline"
-                  size={moderateScale(18)}
-                  color="#000"
-                />
-                <Text style={styles.menuText}>Change Password</Text>
-                <Ionicons
-                  name="chevron-forward"
-                  size={moderateScale(18)}
-                  color="#888"
-                  style={{ marginLeft: "auto" }}
-                />
-              </TouchableOpacity>
-            </View>
+                {/* Menu */}
+                <View style={styles.menuContainer}>
+                  <TouchableOpacity
+                    style={styles.menuItem}
+                    activeOpacity={0.7}
+                    onPress={() => router.push("/(tabs)/editprofile")}
+                  >
+                    <Ionicons
+                      name="person-outline"
+                      size={moderateScale(18)}
+                      color="#000"
+                    />
+                    <Text style={styles.menuText}>Edit Profile</Text>
+                    <Ionicons
+                      name="chevron-forward"
+                      size={moderateScale(18)}
+                      color="#888"
+                      style={{ marginLeft: "auto" }}
+                    />
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
           </>
         )}
       </ScrollView>
@@ -293,6 +303,11 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+  },
+  profileLoadingContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: verticalScale(50),
   },
   loadingText: {
     marginTop: verticalScale(10),

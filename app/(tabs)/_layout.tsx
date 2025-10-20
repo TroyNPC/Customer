@@ -1,13 +1,24 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Tabs } from "expo-router";
+import { Tabs, usePathname } from "expo-router";
 import React from "react";
 
 import { HapticTab } from "@/components/haptic-tab";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  const { loggedIn, guest, isLoading } = useAuth();
+  const pathname = usePathname();
+
+  // Hide tab bar on index page (landing page) and auth pages
+  const isIndexPage = 
+    pathname === "/" || 
+    pathname === "/(tabs)" ||
+    pathname === "/(tabs)/" ||
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/signup");
 
   return (
     <Tabs
@@ -15,18 +26,27 @@ export default function TabLayout() {
         tabBarActiveTintColor: Colors[colorScheme ?? "light"].tint,
         headerShown: false,
         tabBarButton: HapticTab,
+        // Hide tab bar on index page and auth pages
+        tabBarStyle: isIndexPage ? { display: "none" } : {},
       }}
     >
+      {/* ===== Hide Index tab completely when logged in or guest ===== */}
+      {(!loggedIn && !guest) ? (
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: "Home",
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="home" size={size} color={color} />
+            ),
+          }}
+        />
+      ) : (
+        // When logged in or guest, completely hide the index tab
+        <Tabs.Screen name="index" options={{ href: null }} />
+      )}
+
       {/* ===== Core Tabs ===== */}
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: "Home",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home" size={size} color={color} />
-          ),
-        }}
-      />
       <Tabs.Screen
         name="map"
         options={{
@@ -47,7 +67,7 @@ export default function TabLayout() {
         }}
       />
 
-              <Tabs.Screen
+      <Tabs.Screen
         name="notifications"
         options={{
           title: "Notifications",
@@ -57,7 +77,6 @@ export default function TabLayout() {
         }}
       />
   
-
       <Tabs.Screen
         name="profile"
         options={{

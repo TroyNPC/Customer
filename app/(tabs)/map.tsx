@@ -267,21 +267,21 @@ export default function MapScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.headerBox}>
-        <Svg width="100%" height={mvs(300)} viewBox="0 0 1440 320" style={styles.waveTop} preserveAspectRatio="none">
-          <Path fill="#3864C3" d="M0,64 C720,-32 720,160 1440,64 L1440,0 L0,0 Z" />
-        </Svg>
-        <View style={styles.headerContent}>
-          <TouchableOpacity onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={ms(24)} color="white" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>LAUNDRY SHOPS NEARBY</Text>
-          <TouchableOpacity onPress={() => setTracking(!tracking)}>
-            <Ionicons name={tracking ? "navigate" : "navigate-outline"} size={ms(24)} color="white" />
-          </TouchableOpacity>
-        </View>
-      </View>
+<View style={styles.container}>
+  <View style={styles.headerBox}>
+    <Svg width="100%" height={mvs(300)} viewBox="0 0 1440 320" style={styles.waveTop} preserveAspectRatio="none">
+      <Path fill="#3864C3" d="M0,64 C720,-32 720,160 1440,64 L1440,0 L0,0 Z" />
+    </Svg>
+    <View style={styles.headerContent}>
+      <Text style={styles.headerTitle}>Laundry Shops Nearby</Text>
+      <TouchableOpacity 
+        style={styles.trackingButton} 
+        onPress={() => setTracking(!tracking)}
+      >
+        <Ionicons name={tracking ? "navigate" : "navigate-outline"} size={ms(24)} color="white" />
+      </TouchableOpacity>
+    </View>
+  </View>
 
       <View style={styles.mapContainer}>
         <WebView 
@@ -344,8 +344,26 @@ const styles = ScaledSheet.create({
   container: { flex: 1, backgroundColor: "white" },
   headerBox: { width: "100%", height: mvs(120), backgroundColor: "#0AADFF", justifyContent: "center", overflow: "hidden" },
   waveTop: { position: "absolute", top: 0, left: 0, zIndex: 1 },
-  headerContent: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: s(20), zIndex: 2 },
-  headerTitle: { fontSize: ms(18), fontWeight: "bold", color: "white", textAlign: "center" },
+headerContent: {
+  flexDirection: "row",
+  alignItems: "center",
+  paddingHorizontal: s(20),
+  zIndex: 2,
+  width: "100%",
+},
+headerTitle: {
+  fontSize: ms(18),
+  fontWeight: "bold",
+  color: "white",
+  textAlign: "center",
+  position: "absolute",
+  left: 0,
+  right: 0,
+},
+trackingButton: {
+  marginLeft: "auto", // This pushes the button to the right
+  zIndex: 3, // Ensures button is above the text
+},
   mapContainer: { width: "100%", height: mvs(250), position: "relative" },
   gpsButton: { position: "absolute", bottom: mvs(15), right: s(15), backgroundColor: "#3864C3", padding: s(12), borderRadius: ms(50), elevation: 6 },
   shopCard: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: "white", padding: mvs(12), borderBottomWidth: 1, borderColor: "#ddd" },

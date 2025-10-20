@@ -344,7 +344,7 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   headerTitle: {
-    fontSize: scale(16),
+    fontSize: scale(20),
     fontWeight: "bold",
     color: "white",
     textAlign: "center",
