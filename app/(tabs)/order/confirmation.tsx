@@ -242,11 +242,7 @@ export default function ConfirmationPage() {
     return status;
   };
 
-  const calculateTotalPrice = () => {
-    const total = orderItems.reduce((total, item) => total + (item.subtotal || 0), 0);
-    console.log('💰 Total price calculated:', total);
-    return total;
-  };
+  // REMOVED calculateTotalPrice function since we don't show total amount
 
   if (loading) {
     console.log('⏳ Showing loading state');
@@ -291,11 +287,9 @@ export default function ConfirmationPage() {
   }
 
   const currentStatus = getOrderStatus();
-  const totalPrice = calculateTotalPrice();
 
   console.log('✅ Rendering confirmation page with order:', order.id);
   console.log('📊 Current status:', currentStatus);
-  console.log('💰 Total price:', totalPrice);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -475,7 +469,7 @@ export default function ConfirmationPage() {
                       <Text style={styles.itemQuantity}>
                         {item.quantity} {service?.unit || "kg"}
                       </Text>
-                      <Text style={styles.itemPrice}>₱{item.subtotal}</Text>
+                      {/* REMOVED item price since there's no amount yet */}
                     </View>
                     <View
                       style={[
@@ -503,11 +497,7 @@ export default function ConfirmationPage() {
             </View>
           )}
 
-          {/* Total Price */}
-          <View style={[styles.detailRow, styles.totalRow]}>
-            <Text style={styles.totalLabel}>Total Amount</Text>
-            <Text style={styles.totalPrice}>₱{totalPrice}</Text>
-          </View>
+          {/* REMOVED Total Price section since there's no amount calculated yet */}
         </View>
 
         {/* Next Steps */}
@@ -551,14 +541,14 @@ export default function ConfirmationPage() {
             <View style={styles.stepContent}>
               <Text style={styles.stepTitle}>Payment</Text>
               <Text style={styles.stepDescription}>
-                Payment will be collected when you pick up your laundry or upon
-                delivery.
+                Payment will be calculated based on the actual weight and collected 
+                when you pick up your laundry or upon delivery.
               </Text>
             </View>
           </View>
         </View>
 
-        {/* Action Buttons - REMOVED TRACK ORDER */}
+        {/* Action Buttons */}
         <View style={styles.actionsContainer}>
           <TouchableOpacity
             style={styles.primaryButton}
@@ -593,7 +583,7 @@ export default function ConfirmationPage() {
             <Text style={styles.debugText}>Order ID: {orderId}</Text>
             <Text style={styles.debugText}>Status: {currentStatus}</Text>
             <Text style={styles.debugText}>Items: {orderItems.length}</Text>
-            <Text style={styles.debugText}>Total: ₱{totalPrice}</Text>
+            {/* REMOVED total price from debug info */}
           </View>
         )}
       </ScrollView>
@@ -827,11 +817,7 @@ const styles = ScaledSheet.create({
     fontSize: ms(12),
     color: "#6B7280",
   },
-  itemPrice: {
-    fontSize: ms(12),
-    fontWeight: "600",
-    color: "#10B981",
-  },
+  // REMOVED itemPrice style since it's not used anymore
   itemStatusBadge: {
     alignSelf: "flex-start",
     paddingHorizontal: s(8),
@@ -843,23 +829,7 @@ const styles = ScaledSheet.create({
     color: "white",
     fontWeight: "600",
   },
-  totalRow: {
-    borderBottomWidth: 0,
-    paddingTop: mvs(16),
-    marginTop: mvs(8),
-    borderTopWidth: 1,
-    borderTopColor: "#E5E7EB",
-  },
-  totalLabel: {
-    fontSize: ms(16),
-    fontWeight: "bold",
-    color: "#1F2937",
-  },
-  totalPrice: {
-    fontSize: ms(18),
-    fontWeight: "bold",
-    color: "#10B981",
-  },
+  // REMOVED totalRow, totalLabel, and totalPrice styles since they're not used
   nextStepsCard: {
     backgroundColor: "white",
     marginHorizontal: s(16),
@@ -942,15 +912,6 @@ const styles = ScaledSheet.create({
     fontSize: ms(16),
     fontWeight: "bold",
     marginLeft: s(8),
-  },
-  tertiaryButton: {
-    alignItems: "center",
-    paddingVertical: mvs(12),
-  },
-  tertiaryButtonText: {
-    color: "#6B7280",
-    fontSize: ms(14),
-    fontWeight: "500",
   },
   supportCard: {
     flexDirection: "row",

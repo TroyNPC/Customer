@@ -12,7 +12,6 @@ export default {
     extra: {
       supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
       supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
-      supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
       router: {},
       eas: {
         "projectId": "8e3a24f5-4fd3-43d5-8bb3-a2b5f4bd99aa"

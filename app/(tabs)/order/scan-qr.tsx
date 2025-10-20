@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import { useAuth } from '../../../lib/authContext'; // ADD THIS IMPORT
 import { supabaseClient } from '../../../lib/supabaseClient';
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -18,8 +19,9 @@ export default function ScanQRPage() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { shopId, method, formData } = params;
+  const { user } = useAuth(); // ADD THIS HOOK
   
-   // Ensure shopId is a string (not an array)
+  // Ensure shopId is a string (not an array)
   const shopIdString = Array.isArray(shopId) ? shopId[0] : shopId;
   const methodString = Array.isArray(method) ? method[0] : method;
 
@@ -47,6 +49,8 @@ export default function ScanQRPage() {
     console.log('=== QR SCAN DEBUG ===');
     console.log('Scanned QR Data:', data);
     console.log('Expected Shop ID:', shopId);
+    console.log('User ID:', user?.id); // ADD THIS LOG
+    console.log('Is Guest in formData:', parsedFormData?.isGuest); // ADD THIS LOG
     console.log('====================');
     
     // Verify the scanned QR code matches the expected shop
@@ -128,16 +132,26 @@ export default function ScanQRPage() {
     try {
       // Get method ID
       const { data: methodData } = await supabaseClient
-      .from('shop_methods')
-      .select('id')
-      .eq('code', methodString)
-      .single();
+        .from('shop_methods')
+        .select('id')
+        .eq('code', methodString)
+        .single();
 
       if (!methodData) throw new Error('Invalid order method');
 
+      console.log('=== CREATING ORDER FROM QR SCAN ===');
+      console.log('User ID:', user?.id);
+      console.log('Is Guest from formData:', parsedFormData.isGuest);
+      console.log('Using customer ID:', user?.id || '00000000-0000-0000-0000-000000000000');
+      console.log('================================');
+
+      // 🚨 FIX: Use the correct customer ID based on authentication
+      // If user is logged in, use their ID. If guest, use the guest ID.
+      const customerId = user?.id || '00000000-0000-0000-0000-000000000000';
+
       // Use the database function instead of direct insert
       const { data: orderId, error } = await supabaseClient.rpc('create_laundry_order', {
-        p_customer_id: '00000000-0000-0000-0000-000000000000', // Guest order
+        p_customer_id: customerId, // 🚨 FIXED: Use dynamic customer ID
         p_branch_id: shopIdString,
         p_method_id: methodData.id,
         p_detergent_id: parsedFormData.detergentId,
@@ -152,23 +166,42 @@ export default function ScanQRPage() {
           detergent_name: parsedFormData.detergentName,
           softener_name: parsedFormData.softenerName,
           service_name: parsedFormData.serviceName,
-          qr_verified_at: new Date().toISOString()
+          qr_verified_at: new Date().toISOString(),
+          // Add user info for tracking
+          user_id: user?.id || null,
+          user_email: user?.email || null
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Database error in QR scan:', error);
+        throw error;
+      }
+
+      console.log('✅ Order created successfully from QR scan! Order ID:', orderId);
 
       // Success - navigate to confirmation
-      router.push({
+      router.replace({ // 🚨 Use replace to prevent going back to scanner
         pathname: "/(tabs)/order/confirmation",
         params: { orderId }
       });
 
     } catch (error) {
-      console.error('Error creating order after QR scan:', error);
-      Alert.alert("Error", "Failed to create order. Please try again.");
-    } finally {
-      setLoading(false);
+      console.error('❌ Error creating order after QR scan:', error);
+      Alert.alert(
+        "Error", 
+        "Failed to create order. Please try again.",
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              setScanned(false);
+              setCameraActive(true);
+              setLoading(false);
+            }
+          }
+        ]
+      );
     }
   };
 
@@ -239,6 +272,11 @@ export default function ScanQRPage() {
         <Text style={styles.summaryText}>Softener: {parsedFormData.softenerName}</Text>
         <Text style={styles.summaryText}>Method: {method}</Text>
         <Text style={styles.summaryText}>Total: ₱{parsedFormData.servicePrice}</Text>
+        
+        {/* 🚨 ADD USER STATUS DISPLAY */}
+        <Text style={styles.userStatusText}>
+          {user ? `Logged in as: ${user.email}` : 'Continuing as guest'}
+        </Text>
       </View>
 
       {/* QR Scanner Container */}
@@ -337,13 +375,19 @@ const styles = StyleSheet.create({
     color: '#666',
     marginBottom: 2,
   },
+  userStatusText: {
+    fontSize: 11,
+    color: '#3864C3',
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
   cameraContainer: {
     height: 300,
     marginHorizontal: 16,
     marginBottom: 16,
     borderRadius: 12,
     overflow: 'hidden',
-    position: 'relative', // Important for absolute positioning
+    position: 'relative',
   },
   cameraWrapper: {
     flex: 1,
@@ -370,8 +414,8 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   overlay: {
-    ...StyleSheet.absoluteFillObject, // This makes it cover the entire camera
-    backgroundColor: 'rgba(0, 0, 0, 0.3)', // Semi-transparent background
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
   },

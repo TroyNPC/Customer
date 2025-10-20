@@ -28,15 +28,35 @@ interface Notification {
     delivery_status?: string;
     shop_name?: string;
     branch_name?: string;
+    total_amount?: number;
+    weight?: number;
+    price_per_kg?: number;
+    service_name?: string;
   };
   sent_at: string;
   read_at: string | null;
+}
+
+interface OrderItem {
+  subtotal: number;
+  quantity: number;
+  price_per_unit: number;
+  shop_services?: {
+    name: string;
+    price_per_kg: number;
+  };
+}
+
+interface OrderWithPrice {
+  id: string;
+  order_items?: OrderItem[];
 }
 
 export default function Notifications() {
   const router = useRouter();
   const { user, guest } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [orderPrices, setOrderPrices] = useState<Record<string, OrderWithPrice>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -70,11 +90,62 @@ export default function Notifications() {
 
       console.log('Notifications fetched:', notificationsData?.length);
       setNotifications(notificationsData || []);
+
+      // Fetch price information for orders mentioned in notifications
+      await fetchOrderPrices(notificationsData || []);
+
     } catch (error) {
       console.error('Error in fetchNotifications:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+  };
+
+  const fetchOrderPrices = async (notificationsData: Notification[]) => {
+    try {
+      // Extract unique order IDs from notifications
+      const orderIds = notificationsData
+        .map(notif => notif.payload.order_id)
+        .filter(Boolean) as string[];
+
+      if (orderIds.length === 0) return;
+
+      console.log('Fetching price data for orders:', orderIds);
+
+      // Fetch order data with price information (simplified - no payments)
+      const { data: ordersData, error } = await supabaseClient
+        .from('orders')
+        .select(`
+          id,
+          order_items (
+            subtotal,
+            quantity,
+            price_per_unit,
+            shop_services (
+              name,
+              price_per_kg
+            )
+          )
+        `)
+        .in('id', orderIds);
+
+      if (error) {
+        console.error('Error fetching order prices:', error);
+        return;
+      }
+
+      // Create a map of order IDs to price data
+      const pricesMap: Record<string, OrderWithPrice> = {};
+      ordersData?.forEach(order => {
+        pricesMap[order.id] = order;
+      });
+
+      setOrderPrices(pricesMap);
+      console.log('Price data loaded for orders:', Object.keys(pricesMap));
+
+    } catch (error) {
+      console.error('Error in fetchOrderPrices:', error);
     }
   };
 
@@ -115,10 +186,70 @@ export default function Notifications() {
     fetchNotifications();
   };
 
+  // Calculate total price for an order from order items
+  const getOrderTotal = (orderId: string): number | null => {
+    const order = orderPrices[orderId];
+    if (!order) return null;
+
+    // Calculate from order items
+    if (order.order_items && order.order_items.length > 0) {
+      const total = order.order_items.reduce((total, item) => total + (item.subtotal || 0), 0);
+      console.log(`Calculated total for order ${orderId}: ${total}`);
+      return total;
+    }
+
+    console.log(`No order items found for order ${orderId}`);
+    return null;
+  };
+
+  // Get price information for display
+  const getPriceInfo = (notification: Notification) => {
+    const orderId = notification.payload.order_id;
+    if (!orderId) {
+      console.log('No order ID in notification');
+      return null;
+    }
+
+    const totalAmount = getOrderTotal(orderId);
+
+    if (totalAmount && totalAmount > 0) {
+      return {
+        total: totalAmount,
+        formattedTotal: `₱${totalAmount.toFixed(2)}`,
+        hasPrice: true
+      };
+    }
+
+    // If no total amount, check if we have price from notification payload
+    if (notification.payload.total_amount) {
+      return {
+        total: notification.payload.total_amount,
+        formattedTotal: `₱${notification.payload.total_amount.toFixed(2)}`,
+        hasPrice: true
+      };
+    }
+
+    // Check for service rate information
+    if (notification.payload.price_per_kg) {
+      return {
+        pricePerUnit: notification.payload.price_per_kg,
+        formattedPricePerUnit: `₱${notification.payload.price_per_kg}/${notification.payload.service_name?.toLowerCase().includes('dry') ? 'load' : 'kg'}`,
+        hasPrice: true
+      };
+    }
+
+    console.log(`No price information found for order ${orderId}`);
+    return null;
+  };
+
   // Get appropriate icon and color based on notification content
   const getNotificationIcon = (notification: Notification) => {
     const { payload, title } = notification;
+    const priceInfo = getPriceInfo(notification);
     
+    if (priceInfo) {
+      return { icon: 'cash-outline' as const, color: '#27AE60' };
+    }
     if (title?.toLowerCase().includes('ready') || payload.order_status === 'ready') {
       return { icon: 'cube-outline' as const, color: '#FFA000' };
     }
@@ -130,9 +261,6 @@ export default function Notifications() {
     }
     if (title?.toLowerCase().includes('received') || payload.order_status === 'received') {
       return { icon: 'shirt-outline' as const, color: '#9C27B0' };
-    }
-    if (title?.toLowerCase().includes('paid') || payload.order_status === 'paid') {
-      return { icon: 'card-outline' as const, color: '#4CAF50' };
     }
     
     // Default icon
@@ -290,6 +418,7 @@ export default function Notifications() {
           notifications.map((item) => {
             const { icon, color } = getNotificationIcon(item);
             const isUnread = !item.read_at;
+            const priceInfo = getPriceInfo(item);
 
             return (
               <TouchableOpacity
@@ -307,6 +436,24 @@ export default function Notifications() {
                   <View style={{ flex: 1 }}>
                     <Text style={styles.cardTitle}>{item.title}</Text>
                     <Text style={styles.body}>{item.body}</Text>
+                    
+                    {/* Price Information */}
+                    {priceInfo && (
+                      <View style={styles.priceContainer}>
+                        {priceInfo.formattedTotal && (
+                          <Text style={styles.totalPrice}>
+                            Total: {priceInfo.formattedTotal}
+                          </Text>
+                        )}
+                        {priceInfo.formattedPricePerUnit && (
+                          <Text style={styles.unitPrice}>
+                            Rate: {priceInfo.formattedPricePerUnit}
+                          </Text>
+                        )}
+                      </View>
+                    )}
+
+                    {/* Shop/Branch Information */}
                     {item.payload.shop_name && (
                       <Text style={styles.location}>
                         {item.payload.shop_name}
@@ -321,6 +468,13 @@ export default function Notifications() {
                   <Text style={styles.time}>
                     {formatRelativeTime(item.sent_at)}
                   </Text>
+                  
+                  {/* Order ID for reference */}
+                  {item.payload.order_id && (
+                    <Text style={styles.orderId}>
+                      #{item.payload.order_id.substring(0, 8)}
+                    </Text>
+                  )}
                 </View>
               </TouchableOpacity>
             );
@@ -473,6 +627,21 @@ const styles = ScaledSheet.create({
     lineHeight: ms(18),
     marginBottom: mvs(4),
   },
+  priceContainer: {
+    marginTop: mvs(6),
+    marginBottom: mvs(4),
+  },
+  totalPrice: {
+    fontSize: ms(13),
+    fontWeight: "700",
+    color: "#27AE60",
+    marginBottom: mvs(2),
+  },
+  unitPrice: {
+    fontSize: ms(12),
+    color: "#666",
+    fontStyle: "italic",
+  },
   location: {
     fontSize: ms(12),
     color: "#777",
@@ -487,6 +656,11 @@ const styles = ScaledSheet.create({
   time: {
     fontSize: ms(12),
     color: "#999",
+  },
+  orderId: {
+    fontSize: ms(11),
+    color: "#999",
+    fontFamily: 'monospace',
   },
   unreadDot: {
     width: s(8),
