@@ -1,3 +1,4 @@
+// app/(tabs)/order/confirmation.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -34,6 +35,12 @@ export default function ConfirmationPage() {
     ? params.orderId[0]
     : params.orderId;
 
+  console.log('=== CONFIRMATION PAGE DEBUG ===');
+  console.log('📱 Confirmation page mounted');
+  console.log('📋 Order ID from params:', orderId);
+  console.log('🔍 All params:', params);
+  console.log('========================');
+
   const [order, setOrder] = useState<Order | null>(null);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [services, setServices] = useState<ShopService[]>([]);
@@ -43,18 +50,27 @@ export default function ConfirmationPage() {
   const [softener, setSoftener] = useState<Softener | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    console.log('🔄 useEffect triggered, orderId:', orderId);
     if (orderId) {
       fetchOrderDetails();
+    } else {
+      console.error('❌ No orderId provided to confirmation page');
+      setError("No order ID provided");
+      setLoading(false);
     }
   }, [orderId]);
 
   const fetchOrderDetails = async () => {
+    console.log('🔄 Fetching order details for:', orderId);
     try {
       setLoading(true);
+      setError(null);
 
       // Fetch order with related data
+      console.log('📡 Fetching order data...');
       const { data: orderData, error: orderError } = await supabaseClient
         .from("orders")
         .select(`
@@ -68,30 +84,56 @@ export default function ConfirmationPage() {
         .eq("id", orderId)
         .single();
 
-      if (orderError) throw orderError;
+      if (orderError) {
+        console.error('❌ Error fetching order:', orderError);
+        throw orderError;
+      }
+
+      console.log('✅ Order data loaded:', orderData?.id);
       setOrder(orderData);
 
       // Set related data
-      if (orderData.shop_branches) setBranch(orderData.shop_branches);
-      if (orderData.shop_methods) setMethod(orderData.shop_methods);
-      if (orderData.detergent_types) setDetergent(orderData.detergent_types);
-      if (orderData.softener_types) setSoftener(orderData.softener_types);
+      if (orderData.shop_branches) {
+        console.log('🏪 Branch data:', orderData.shop_branches.name);
+        setBranch(orderData.shop_branches);
+      }
+      if (orderData.shop_methods) {
+        console.log('🚚 Method data:', orderData.shop_methods.label);
+        setMethod(orderData.shop_methods);
+      }
+      if (orderData.detergent_types) {
+        console.log('🧴 Detergent data:', orderData.detergent_types.name);
+        setDetergent(orderData.detergent_types);
+      }
+      if (orderData.softener_types) {
+        console.log('🌊 Softener data:', orderData.softener_types.name);
+        setSoftener(orderData.softener_types);
+      }
       if (orderData.shop_services) {
+        console.log('🛠️ Service data:', orderData.shop_services.name);
         setServices([orderData.shop_services]);
       }
 
       // Fetch order items
+      console.log('📦 Fetching order items...');
       const { data: orderItemsData, error: itemsError } = await supabaseClient
         .from("order_items")
         .select("*")
         .eq("order_id", orderId);
 
-      if (itemsError) throw itemsError;
+      if (itemsError) {
+        console.error('❌ Error fetching order items:', itemsError);
+        throw itemsError;
+      }
+
+      console.log('✅ Order items loaded:', orderItemsData?.length || 0);
       setOrderItems(orderItemsData || []);
 
       // If no service from order, fetch services from order items
       if (!orderData.shop_services && orderItemsData && orderItemsData.length > 0) {
         const serviceIds = orderItemsData.map(item => item.service_id).filter(Boolean);
+        console.log('🔄 Fetching services from order items:', serviceIds);
+        
         if (serviceIds.length > 0) {
           const { data: servicesData, error: servicesError } = await supabaseClient
             .from("shop_services")
@@ -100,11 +142,15 @@ export default function ConfirmationPage() {
 
           if (servicesError) throw servicesError;
           setServices(servicesData || []);
+          console.log('✅ Additional services loaded:', servicesData?.length || 0);
         }
       }
 
+      console.log('✅ All order data loaded successfully');
+
     } catch (error) {
-      console.error("Error fetching order details:", error);
+      console.error('❌ Error fetching order details:', error);
+      setError("Failed to load order details. Please try again.");
       Alert.alert("Error", "Failed to load order details. Please try again.");
     } finally {
       setLoading(false);
@@ -113,22 +159,25 @@ export default function ConfirmationPage() {
   };
 
   const handleRefresh = () => {
+    console.log('🔄 Manual refresh triggered');
     setRefreshing(true);
     fetchOrderDetails();
   };
 
-  const handleTrackOrder = () => {
-    router.push({
-      pathname: "/(tabs)/orderhistory",
-      params: { orderId },
-    });
+  const handleRetry = () => {
+    console.log('🔄 Retry button pressed');
+    setError(null);
+    setLoading(true);
+    fetchOrderDetails();
   };
 
   const handleNewOrder = () => {
+    console.log('🎯 Creating new order');
     router.push("/map");
   };
 
   const handleViewOrders = () => {
+    console.log('🎯 Viewing all orders');
     router.push("/(tabs)/orderhistory");
   };
 
@@ -171,7 +220,10 @@ export default function ConfirmationPage() {
   };
 
   const getOrderStatus = () => {
-    if (!orderItems.length) return "pending";
+    if (!orderItems.length) {
+      console.log('📊 No order items, status: pending');
+      return "pending";
+    }
 
     const allCompleted = orderItems.every(
       (item) => item.status === "completed"
@@ -181,40 +233,58 @@ export default function ConfirmationPage() {
       (item) => item.status === "in_progress"
     );
 
-    if (allCompleted) return "delivered";
-    if (anyReady) return "ready";
-    if (anyInProgress) return "washing";
-    return "confirmed";
+    let status = "confirmed";
+    if (allCompleted) status = "delivered";
+    else if (anyReady) status = "ready";
+    else if (anyInProgress) status = "washing";
+
+    console.log('📊 Order status calculated:', status);
+    return status;
   };
 
   const calculateTotalPrice = () => {
-    return orderItems.reduce((total, item) => total + (item.subtotal || 0), 0);
+    const total = orderItems.reduce((total, item) => total + (item.subtotal || 0), 0);
+    console.log('💰 Total price calculated:', total);
+    return total;
   };
 
   if (loading) {
+    console.log('⏳ Showing loading state');
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#3864C3" />
           <Text style={styles.loadingText}>Loading order details...</Text>
+          <Text style={styles.debugText}>Order ID: {orderId}</Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  if (!order) {
+  if (error || !order) {
+    console.log('❌ Showing error state:', error);
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={ms(64)} color="#DC2626" />
-          <Text style={styles.errorTitle}>Order Not Found</Text>
-          <Text style={styles.errorText}>
-            We couldn't find the order details. Please check your order ID and
-            try again.
+          <Text style={styles.errorTitle}>
+            {error ? "Unable to Load Order" : "Order Not Found"}
           </Text>
-          <TouchableOpacity style={styles.primaryButton} onPress={handleNewOrder}>
-            <Text style={styles.primaryButtonText}>Create New Order</Text>
+          <Text style={styles.errorText}>
+            {error || "We couldn't find the order details. Please check your order ID and try again."}
+          </Text>
+          
+          <TouchableOpacity style={styles.primaryButton} onPress={handleRetry}>
+            <Ionicons name="refresh" size={ms(20)} color="white" />
+            <Text style={styles.primaryButtonText}>Try Again</Text>
           </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.secondaryButton} onPress={handleNewOrder}>
+            <Ionicons name="add-circle-outline" size={ms(20)} color="#3864C3" />
+            <Text style={styles.secondaryButtonText}>Create New Order</Text>
+          </TouchableOpacity>
+
+          <Text style={styles.debugText}>Order ID: {orderId}</Text>
         </View>
       </SafeAreaView>
     );
@@ -222,6 +292,10 @@ export default function ConfirmationPage() {
 
   const currentStatus = getOrderStatus();
   const totalPrice = calculateTotalPrice();
+
+  console.log('✅ Rendering confirmation page with order:', order.id);
+  console.log('📊 Current status:', currentStatus);
+  console.log('💰 Total price:', totalPrice);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -241,7 +315,10 @@ export default function ConfirmationPage() {
         </Svg>
 
         <View style={styles.headerContent}>
-          <TouchableOpacity activeOpacity={0.7} onPress={() => router.back()}>
+          <TouchableOpacity activeOpacity={0.7} onPress={() => {
+            console.log('🔙 Back button pressed');
+            router.back();
+          }}>
             <Ionicons name="arrow-back" size={ms(25)} color="white" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Order Confirmed</Text>
@@ -481,29 +558,22 @@ export default function ConfirmationPage() {
           </View>
         </View>
 
-        {/* Action Buttons */}
+        {/* Action Buttons - REMOVED TRACK ORDER */}
         <View style={styles.actionsContainer}>
           <TouchableOpacity
             style={styles.primaryButton}
-            onPress={handleTrackOrder}
+            onPress={handleNewOrder}
           >
-            <Ionicons name="list-outline" size={ms(20)} color="white" />
-            <Text style={styles.primaryButtonText}>Track Order</Text>
+            <Ionicons name="add-circle-outline" size={ms(20)} color="white" />
+            <Text style={styles.primaryButtonText}>Create New Order</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.secondaryButton}
-            onPress={handleNewOrder}
-          >
-            <Ionicons name="add-circle-outline" size={ms(20)} color="#3864C3" />
-            <Text style={styles.secondaryButtonText}>New Order</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.tertiaryButton}
             onPress={handleViewOrders}
           >
-            <Text style={styles.tertiaryButtonText}>View All Orders</Text>
+            <Ionicons name="list-outline" size={ms(20)} color="#3864C3" />
+            <Text style={styles.secondaryButtonText}>View My Orders</Text>
           </TouchableOpacity>
         </View>
 
@@ -515,6 +585,17 @@ export default function ConfirmationPage() {
             <Text style={styles.supportLink}>support@laundryapp.com</Text>
           </Text>
         </View>
+
+        {/* Debug Info - Only visible in development */}
+        {__DEV__ && (
+          <View style={styles.debugContainer}>
+            <Text style={styles.debugTitle}>Debug Information</Text>
+            <Text style={styles.debugText}>Order ID: {orderId}</Text>
+            <Text style={styles.debugText}>Status: {currentStatus}</Text>
+            <Text style={styles.debugText}>Items: {orderItems.length}</Text>
+            <Text style={styles.debugText}>Total: ₱{totalPrice}</Text>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -564,11 +645,20 @@ const styles = ScaledSheet.create({
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#F8FAFC",
+    padding: s(20),
   },
   loadingText: {
     marginTop: mvs(16),
     fontSize: ms(16),
     color: "#6B7280",
+    textAlign: "center",
+  },
+  debugText: {
+    fontSize: ms(10),
+    color: "#9CA3AF",
+    textAlign: "center",
+    marginTop: mvs(8),
+    fontFamily: 'monospace',
   },
   errorContainer: {
     flex: 1,
@@ -583,6 +673,7 @@ const styles = ScaledSheet.create({
     color: "#DC2626",
     marginTop: mvs(16),
     marginBottom: mvs(8),
+    textAlign: "center",
   },
   errorText: {
     fontSize: ms(14),
@@ -610,11 +701,13 @@ const styles = ScaledSheet.create({
     fontWeight: "bold",
     color: "#1F2937",
     marginBottom: mvs(8),
+    textAlign: "center",
   },
   successSubtitle: {
     fontSize: ms(16),
     color: "#6B7280",
     textAlign: "center",
+    lineHeight: mvs(20),
   },
   statusCard: {
     backgroundColor: "white",
@@ -873,9 +966,25 @@ const styles = ScaledSheet.create({
     fontSize: ms(12),
     color: "#6B7280",
     marginLeft: s(8),
+    textAlign: "center",
   },
   supportLink: {
     color: "#3864C3",
     fontWeight: "500",
+  },
+  debugContainer: {
+    backgroundColor: "#FEF3C7",
+    marginHorizontal: s(16),
+    marginBottom: mvs(16),
+    padding: s(12),
+    borderRadius: s(8),
+    borderWidth: 1,
+    borderColor: "#F59E0B",
+  },
+  debugTitle: {
+    fontSize: ms(12),
+    fontWeight: "bold",
+    color: "#92400E",
+    marginBottom: mvs(4),
   },
 });

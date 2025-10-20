@@ -1,7 +1,11 @@
+import { useAuth } from "@/hooks/useAuth";
+import { supabaseClient } from "@/lib/supabaseClient";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
+  RefreshControl,
   SafeAreaView,
   ScrollView,
   Text,
@@ -14,38 +18,239 @@ import Svg, { Path } from "react-native-svg";
 const vbW = 1440;
 const vbH = 320;
 
+interface Notification {
+  id: string;
+  title: string;
+  body: string;
+  payload: {
+    order_id?: string;
+    order_status?: string;
+    delivery_status?: string;
+    shop_name?: string;
+    branch_name?: string;
+  };
+  sent_at: string;
+  read_at: string | null;
+}
+
 export default function Notifications() {
   const router = useRouter();
+  const { user, guest } = useAuth();
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const notifications = [
-    {
-      id: 1,
-      title: "DJW Laundry Shop - Laundry is ready for Pickup/Delivery",
-      location: "Dumaguete City",
-      time: "1 Hour Ago",
-      status: "UNPAID",
-      icon: "shirt-outline",
-      color: "#3864C3",
-    },
-    {
-      id: 2,
-      title: "JNK Laundry Shop - Laundry Received",
-      location: "Dumaguete City",
-      time: "4 Days Ago",
-      status: "PAID",
-      icon: "checkmark-circle",
-      color: "#27AE60",
-    },
-    {
-      id: 3,
-      title: "Hangyu Laundry Shop - Laundry Received",
-      location: "Dumaguete City",
-      time: "5 Days Ago",
-      status: "PAID",
-      icon: "checkmark-circle",
-      color: "#27AE60",
-    },
-  ];
+  const fetchNotifications = async () => {
+    // Check if user is guest - skip API calls
+    if (guest) {
+      console.log('Guest mode - skipping notifications fetch');
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      console.log('Fetching notifications for user:', user.id);
+      
+      const { data: notificationsData, error } = await supabaseClient
+        .from('notifications')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('sent_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching notifications:', error);
+        return;
+      }
+
+      console.log('Notifications fetched:', notificationsData?.length);
+      setNotifications(notificationsData || []);
+    } catch (error) {
+      console.error('Error in fetchNotifications:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const markAsRead = async (notificationId: string) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabaseClient
+        .from('notifications')
+        .update({ read_at: new Date().toISOString() })
+        .eq('id', notificationId)
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.error('Error marking notification as read:', error);
+        return;
+      }
+
+      // Update local state
+      setNotifications(prev =>
+        prev.map(notif =>
+          notif.id === notificationId
+            ? { ...notif, read_at: new Date().toISOString() }
+            : notif
+        )
+      );
+    } catch (error) {
+      console.error('Error in markAsRead:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchNotifications();
+  }, [user, guest]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchNotifications();
+  };
+
+  // Get appropriate icon and color based on notification content
+  const getNotificationIcon = (notification: Notification) => {
+    const { payload, title } = notification;
+    
+    if (title?.toLowerCase().includes('ready') || payload.order_status === 'ready') {
+      return { icon: 'cube-outline' as const, color: '#FFA000' };
+    }
+    if (title?.toLowerCase().includes('deliver') || payload.delivery_status === 'delivering') {
+      return { icon: 'bicycle-outline' as const, color: '#3864C3' };
+    }
+    if (title?.toLowerCase().includes('complete') || payload.order_status === 'completed') {
+      return { icon: 'checkmark-circle-outline' as const, color: '#27AE60' };
+    }
+    if (title?.toLowerCase().includes('received') || payload.order_status === 'received') {
+      return { icon: 'shirt-outline' as const, color: '#9C27B0' };
+    }
+    if (title?.toLowerCase().includes('paid') || payload.order_status === 'paid') {
+      return { icon: 'card-outline' as const, color: '#4CAF50' };
+    }
+    
+    // Default icon
+    return { icon: 'notifications-outline' as const, color: '#666' };
+  };
+
+  // Format relative time (e.g., "1 hour ago")
+  const formatRelativeTime = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInMs = now.getTime() - date.getTime();
+    const diffInMinutes = Math.floor(diffInMs / (1000 * 60));
+    const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60));
+    const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+
+    if (diffInMinutes < 1) return 'Just now';
+    if (diffInMinutes < 60) return `${diffInMinutes} minute${diffInMinutes > 1 ? 's' : ''} ago`;
+    if (diffInHours < 24) return `${diffInHours} hour${diffInHours > 1 ? 's' : ''} ago`;
+    if (diffInDays < 7) return `${diffInDays} day${diffInDays > 1 ? 's' : ''} ago`;
+    
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+    });
+  };
+
+  // Guest View
+  if (guest) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        {/* Header with Wave */}
+        <View style={styles.headerBox}>
+          <Svg
+            width="100%"
+            height={mvs(300)}
+            viewBox={`0 0 ${vbW} ${vbH}`}
+            style={styles.waveTop}
+            preserveAspectRatio="none"
+          >
+            <Path
+              fill="#3864C3"
+              d={`M0,${vbH * 0.2} C ${vbW * 0.5},${vbH * -0.1} ${vbW * 0.45},${vbH * 0.6} ${vbW},${vbH * 0.2} L${vbW},0 L0,0 Z`}
+            />
+          </Svg>
+
+          <View style={styles.headerContent}>
+            <TouchableOpacity onPress={() => router.back()}>
+              <Ionicons name="arrow-back" size={ms(24)} color="white" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Notifications</Text>
+            <View style={{ width: s(24) }} />
+          </View>
+        </View>
+
+        {/* Guest Content */}
+        <View style={styles.guestContainer}>
+          <Ionicons
+            name="notifications-off-outline"
+            size={ms(80)}
+            color="#CCCCCC"
+            style={{ marginBottom: mvs(20) }}
+          />
+          <Text style={styles.guestTitle}>Notifications Unavailable</Text>
+          <Text style={styles.guestSubtitle}>
+            Please log in to receive order updates and notifications about your laundry.
+          </Text>
+
+          <View style={styles.guestButtons}>
+            <TouchableOpacity
+              style={[styles.authButton, { backgroundColor: "#3864C3" }]}
+              onPress={() => router.push("/signup")}
+            >
+              <Text style={styles.authButtonText}>Create Account</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.authButton, { backgroundColor: "#4CAF50" }]}
+              onPress={() => router.push("/login")}
+            >
+              <Text style={styles.authButtonText}>Log In</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.headerBox}>
+          <Svg
+            width="100%"
+            height={mvs(300)}
+            viewBox={`0 0 ${vbW} ${vbH}`}
+            style={styles.waveTop}
+            preserveAspectRatio="none"
+          >
+            <Path
+              fill="#3864C3"
+              d={`M0,${vbH * 0.2} C ${vbW * 0.5},${vbH * -0.1} ${vbW * 0.45},${vbH * 0.6} ${vbW},${vbH * 0.2} L${vbW},0 L0,0 Z`}
+            />
+          </Svg>
+          <View style={styles.headerContent}>
+            <TouchableOpacity onPress={() => router.back()}>
+              <Ionicons name="arrow-back" size={ms(24)} color="white" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Notifications</Text>
+            <View style={{ width: s(24) }} />
+          </View>
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#3864C3" />
+          <Text style={styles.loadingText}>Loading notifications...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -77,39 +282,62 @@ export default function Notifications() {
       <ScrollView
         contentContainerStyle={{ paddingBottom: mvs(40) }}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
       >
-        {notifications.map((item) => (
-          <View key={item.id} style={styles.card}>
-            <View style={styles.cardHeader}>
-              <Ionicons
-                name={item.icon}
-                size={ms(26)}
-                color={item.color}
-                style={styles.icon}
-              />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>{item.title}</Text>
-                <Text style={styles.location}>{item.location}</Text>
-              </View>
-              {item.status === "PAID" ? (
-                <Ionicons
-                  name="checkmark-circle"
-                  size={ms(22)}
-                  color="#27AE60"
-                />
-              ) : (
-                <Text style={styles.unpaid}>UNPAID</Text>
-              )}
-            </View>
+        {notifications.length > 0 ? (
+          notifications.map((item) => {
+            const { icon, color } = getNotificationIcon(item);
+            const isUnread = !item.read_at;
 
-            <View style={styles.cardFooter}>
-              <Text style={styles.time}>{item.time}</Text>
-              {item.status === "PAID" && (
-                <Text style={styles.paid}>PAID</Text>
-              )}
-            </View>
+            return (
+              <TouchableOpacity
+                key={item.id}
+                style={[styles.card, isUnread && styles.unreadCard]}
+                onPress={() => markAsRead(item.id)}
+              >
+                <View style={styles.cardHeader}>
+                  <Ionicons
+                    name={icon}
+                    size={ms(26)}
+                    color={color}
+                    style={styles.icon}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.cardTitle}>{item.title}</Text>
+                    <Text style={styles.body}>{item.body}</Text>
+                    {item.payload.shop_name && (
+                      <Text style={styles.location}>
+                        {item.payload.shop_name}
+                        {item.payload.branch_name ? ` - ${item.payload.branch_name}` : ''}
+                      </Text>
+                    )}
+                  </View>
+                  {isUnread && <View style={styles.unreadDot} />}
+                </View>
+
+                <View style={styles.cardFooter}>
+                  <Text style={styles.time}>
+                    {formatRelativeTime(item.sent_at)}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })
+        ) : (
+          <View style={styles.emptyContainer}>
+            <Ionicons
+              name="notifications-outline"
+              size={ms(64)}
+              color="#CCCCCC"
+            />
+            <Text style={styles.emptyText}>No notifications yet</Text>
+            <Text style={styles.emptySubtext}>
+              You'll get notifications here when your order status changes
+            </Text>
           </View>
-        ))}
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -142,6 +370,71 @@ const styles = ScaledSheet.create({
     color: "white",
     textAlign: "center",
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    marginTop: mvs(10),
+    fontSize: ms(16),
+    color: "#666",
+  },
+  guestContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: s(40),
+  },
+  guestTitle: {
+    fontSize: ms(20),
+    fontWeight: "bold",
+    color: "#000",
+    marginBottom: mvs(15),
+    textAlign: "center",
+  },
+  guestSubtitle: {
+    fontSize: ms(14),
+    color: "#666",
+    textAlign: "center",
+    lineHeight: ms(20),
+    marginBottom: mvs(30),
+  },
+  guestButtons: {
+    width: "100%",
+    alignItems: "center",
+  },
+  authButton: {
+    width: s(150),
+    paddingVertical: mvs(12),
+    borderRadius: s(10),
+    marginBottom: mvs(10),
+  },
+  authButtonText: {
+    color: "#fff",
+    fontSize: ms(14),
+    textAlign: "center",
+    fontWeight: "bold",
+  },
+  emptyContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: mvs(100),
+    paddingHorizontal: s(40),
+  },
+  emptyText: {
+    fontSize: ms(18),
+    fontWeight: "bold",
+    color: "#666",
+    marginTop: mvs(20),
+    textAlign: "center",
+  },
+  emptySubtext: {
+    fontSize: ms(14),
+    color: "#999",
+    marginTop: mvs(10),
+    textAlign: "center",
+  },
   card: {
     backgroundColor: "#fff",
     borderRadius: s(12),
@@ -154,28 +447,36 @@ const styles = ScaledSheet.create({
     shadowRadius: 5,
     elevation: 3,
   },
+  unreadCard: {
+    backgroundColor: "#F0F7FF",
+    borderLeftWidth: 3,
+    borderLeftColor: "#3864C3",
+  },
   cardHeader: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
   },
   icon: {
     marginRight: s(10),
+    marginTop: s(2),
   },
   cardTitle: {
     fontSize: ms(14),
     fontWeight: "600",
     color: "#333",
     flexShrink: 1,
+    marginBottom: mvs(4),
+  },
+  body: {
+    fontSize: ms(13),
+    color: "#666",
+    lineHeight: ms(18),
+    marginBottom: mvs(4),
   },
   location: {
     fontSize: ms(12),
     color: "#777",
-    marginTop: mvs(3),
-  },
-  unpaid: {
-    fontSize: ms(13),
-    color: "#E63946",
-    fontWeight: "bold",
+    fontStyle: "italic",
   },
   cardFooter: {
     marginTop: mvs(10),
@@ -187,9 +488,11 @@ const styles = ScaledSheet.create({
     fontSize: ms(12),
     color: "#999",
   },
-  paid: {
-    fontSize: ms(13),
-    color: "#27AE60",
-    fontWeight: "bold",
+  unreadDot: {
+    width: s(8),
+    height: s(8),
+    borderRadius: s(4),
+    backgroundColor: "#3864C3",
+    marginLeft: s(5),
   },
 });
