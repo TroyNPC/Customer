@@ -1,24 +1,33 @@
-import { useRouter } from "expo-router"; // 👈 import router
+import { useAuth } from "@/hooks/useAuth";
+import { useRouter } from "expo-router";
 import React from "react";
 import { Dimensions, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
 
-// 📱 Scaling helpers for responsiveness
-const scale = (size: number) => (screenWidth / 375) * size;   // base iPhone width
-const verticalScale = (size: number) => (screenHeight / 812) * size; // base iPhone height
+const scale = (size: number) => (screenWidth / 375) * size;
+const verticalScale = (size: number) => (screenHeight / 812) * size;
 
 const svgHeight = screenHeight * 0.25; 
 const vbW = 1440; 
 const vbH = 320;  
 
 export default function HomeScreen() {
-  const router = useRouter(); // 👈 hook
+  const router = useRouter();
+  const { loginAsGuest } = useAuth();
+
+  const handleLogin = () => {
+    router.push("/login");
+  };
+
+  const handleGuest = () => {
+    loginAsGuest();
+    router.push("/(tabs)/map");
+  };
 
   return (
     <View style={styles.container}>
-
       {/* ===== Top Wave ===== */}
       <Svg
         width={screenWidth}
@@ -59,10 +68,18 @@ export default function HomeScreen() {
           <Text style={styles.feature}>✅ Multiple Shops with Branches</Text>
         </View>
 
-        {/* Button - now navigates to map.tsx */}
-        <TouchableOpacity style={styles.button} onPress={() => router.push("/map")}>
-          <Text style={styles.buttonText}>Get Started</Text>
-        </TouchableOpacity>
+        {/* Buttons Container */}
+        <View style={styles.buttonsContainer}>
+          {/* Login Button */}
+          <TouchableOpacity style={[styles.button, styles.loginButton]} onPress={handleLogin}>
+            <Text style={styles.loginButtonText}>Log In</Text>
+          </TouchableOpacity>
+
+          {/* Guest Button */}
+          <TouchableOpacity style={[styles.button, styles.guestButton]} onPress={handleGuest}>
+            <Text style={styles.guestButtonText}>Continue as Guest</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* ===== Bottom Wave ===== */}
@@ -134,17 +151,36 @@ const styles = StyleSheet.create({
     marginVertical: verticalScale(6),
     textAlign: "left",
   },
-  button: {
-    backgroundColor: "black",
-    marginTop: verticalScale(60),
-    paddingVertical: verticalScale(10),
-    paddingHorizontal: scale(100),
-    borderRadius: 40,
-    textAlign: "center",
+  buttonsContainer: {
+    width: "100%",
+    alignItems: "center",
+    marginTop: verticalScale(20),
   },
-  buttonText: {
+  button: {
+    paddingVertical: verticalScale(15),
+    paddingHorizontal: scale(20),
+    borderRadius: 25,
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: verticalScale(15),
+  },
+  loginButton: {
+    backgroundColor: "white",
+  },
+  loginButtonText: {
+    color: "#0AADFF",
+    fontSize: scale(18),
+    fontWeight: "bold",
+  },
+  guestButton: {
+    backgroundColor: "transparent",
+    borderWidth: 2,
+    borderColor: "white",
+  },
+  guestButtonText: {
     color: "white",
-    fontSize: scale(20),
+    fontSize: scale(18),
     fontWeight: "bold",
   },
 });

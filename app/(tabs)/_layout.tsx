@@ -5,11 +5,9 @@ import React from "react";
 import { HapticTab } from "@/components/haptic-tab";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { useAuth } from "@/hooks/useAuth";
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
-  const { loggedIn } = useAuth(); // ✅ true = logged in, signed up, or guest
 
   return (
     <Tabs
@@ -19,7 +17,7 @@ export default function TabLayout() {
         tabBarButton: HapticTab,
       }}
     >
-      {/* ===== Core Tabs (Always Visible) ===== */}
+      {/* ===== Core Tabs ===== */}
       <Tabs.Screen
         name="index"
         options={{
@@ -57,25 +55,12 @@ export default function TabLayout() {
         }}
       />
 
-      {/* ===== ON/OFF System for Auth Tabs ===== */}
-      <Tabs.Screen
-        name="login"
-        options={{
-          // 🚀 Login tab only visible when NOT logged in
-          href: loggedIn ? null : undefined,
-          title: "Login",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="log-in-outline" size={size} color={color} />
-          ),
-        }}
-      />
+  
 
       <Tabs.Screen
         name="profile"
         options={{
-          // 🚀 Profile tab only visible when logged in/signed up/guest
-          href: loggedIn ? undefined : null,
-          title: "User",
+          title: "Profile",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="person" size={size} color={color} />
           ),
@@ -85,12 +70,15 @@ export default function TabLayout() {
       {/* ===== Hidden Screens ===== */}
       <Tabs.Screen name="signup" options={{ href: null }} />
       <Tabs.Screen name="shop" options={{ href: null }} />
-      <Tabs.Screen name="sendinfoafterqr" options={{ href: null }} />
-      <Tabs.Screen name="deliveryonly" options={{ href: null }} />
-      <Tabs.Screen name="onlyscan" options={{ href: null }} />
       <Tabs.Screen name="trackdeliveryboy" options={{ href: null }} />
       <Tabs.Screen name="changepassword" options={{ href: null }} />
       <Tabs.Screen name="editprofile" options={{ href: null }} />
+      <Tabs.Screen name="order/[id]" options={{ href: null }} />
+      <Tabs.Screen name="order/scan-qr" options={{ href: null }} />
+      <Tabs.Screen name="order/confirmation" options={{ href: null }} />
+      <Tabs.Screen name="login" options={{ href: null }} />
+      <Tabs.Screen name="delivery" options={{ href: null }} />
+      <Tabs.Screen name="order/location-map" options={{ href: null }} />
     </Tabs>
   );
 }

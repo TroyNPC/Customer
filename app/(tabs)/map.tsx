@@ -6,23 +6,31 @@ import { Alert, FlatList, Text, TouchableOpacity, View } from "react-native";
 import { ScaledSheet, ms, mvs, s } from "react-native-size-matters";
 import Svg, { Path } from "react-native-svg";
 import { WebView } from "react-native-webview";
-
-const laundryShops = [
-  { id: "1", name: "DJW Laundry Shop", lat: 9.307, lng: 123.305 },
-  { id: "2", name: "JNK Laundry Shop", lat: 9.315, lng: 123.31 },
-  { id: "3", name: "Hangyu Laundry Shop", lat: 9.31, lng: 123.299 },
-  { id: "4", name: "Zandy Laundry Shop", lat: 9.312, lng: 123.307 },
-];
+import { LaundryShop, fetchLaundryShops } from "../../lib/laundryShops";
 
 export default function MapScreen() {
   const router = useRouter();
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [isNavigating, setIsNavigating] = useState(false);
+  const [laundryShops, setLaundryShops] = useState<LaundryShop[]>([]);
+  const [loading, setLoading] = useState(true);
   const webRef = useRef<WebView>(null);
   const clickCount = useRef<{ [key: string]: number }>({});
   const [tracking, setTracking] = useState(false);
   const [selectedShop, setSelectedShop] = useState<string | null>(null);
   const locationWatcher = useRef<any>(null);
+
+  // Fetch laundry shops from database
+  useEffect(() => {
+    const loadLaundryShops = async () => {
+      setLoading(true);
+      const shops = await fetchLaundryShops();
+      setLaundryShops(shops);
+      setLoading(false);
+    };
+
+    loadLaundryShops();
+  }, []);
 
   // Request location immediately & set up initial GPS
   useEffect(() => {
@@ -86,6 +94,24 @@ export default function MapScreen() {
     webRef.current?.postMessage(JSON.stringify({ action: "focusShop", id: selectedShop, track: true }));
   }, [tracking, selectedShop, location]);
 
+  // Update WebView when laundry shops data changes
+  useEffect(() => {
+    if (laundryShops.length > 0 && webRef.current) {
+      // Send updated shops data to WebView
+      webRef.current.postMessage(
+        JSON.stringify({ 
+          action: "updateShops", 
+          shops: laundryShops.map(shop => ({
+            id: shop.id,
+            name: shop.name,
+            lat: shop.latitude,
+            lng: shop.longitude
+          }))
+        })
+      );
+    }
+  }, [laundryShops]);
+
   const leafletHTML = `<!DOCTYPE html>
   <html>
   <head>
@@ -125,16 +151,24 @@ export default function MapScreen() {
       const map = L.map('map').setView([9.307, 123.305], 14);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' }).addTo(map);
 
-      const shops = ${JSON.stringify(laundryShops)};
+      let shops = [];
       const markers = {};
       let userMarker = null;
       let routeControl = null;
       let activeMarker = null;
 
-      shops.forEach(shop => {
-        const marker = L.marker([shop.lat, shop.lng]).addTo(map).bindPopup('<b>' + shop.name + '</b><br>Dumaguete City');
-        markers[shop.id] = marker;
-      });
+      function updateShops(newShops) {
+        // Clear existing markers
+        Object.values(markers).forEach(marker => map.removeLayer(marker));
+        shops.length = 0; // Clear array
+        
+        // Add new shops
+        shops.push(...newShops);
+        shops.forEach(shop => {
+          const marker = L.marker([shop.lat, shop.lng]).addTo(map).bindPopup('<b>' + shop.name + '</b><br>Dumaguete City');
+          markers[shop.id] = marker;
+        });
+      }
 
       function focusShop(id) {
         const shop = shops.find(s => s.id === id);
@@ -177,6 +211,8 @@ export default function MapScreen() {
           setUserMarker(data.lat, data.lng);
         } else if (data.action === 'centerUser') {
           if (window.currentUser) map.setView([window.currentUser.lat, window.currentUser.lng], 15);
+        } else if (data.action === 'updateShops') {
+          updateShops(data.shops);
         }
       });
     </script>
@@ -242,31 +278,57 @@ export default function MapScreen() {
       </View>
 
       <View style={styles.mapContainer}>
-        <WebView ref={webRef} originWhitelist={["*"]} source={{ html: leafletHTML }} onMessage={handleMessage} style={{ flex: 1 }} />
+        <WebView 
+          ref={webRef} 
+          originWhitelist={["*"]} 
+          source={{ html: leafletHTML }} 
+          onMessage={handleMessage} 
+          style={{ flex: 1 }} 
+        />
         <TouchableOpacity style={styles.gpsButton} onPress={centerOnUser}>
           <Ionicons name="locate" size={ms(28)} color="white" />
         </TouchableOpacity>
       </View>
 
-      <FlatList
-        data={laundryShops}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <TouchableOpacity style={styles.shopCard} onPress={() => handleListClick(item.id)}>
-            <View style={styles.leftIcons}>
-              <Ionicons name="location" size={ms(20)} color="#3864C3" />
-              <Ionicons name="search" size={ms(20)} color="#3864C3" style={{ marginLeft: s(8) }} />
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading laundry shops...</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={laundryShops}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <TouchableOpacity style={styles.shopCard} onPress={() => handleListClick(item.id)}>
+              <View style={styles.leftIcons}>
+                <Ionicons name="location" size={ms(20)} color="#3864C3" />
+                <Ionicons name="search" size={ms(20)} color="#3864C3" style={{ marginLeft: s(8) }} />
+              </View>
+              <View style={styles.shopInfo}>
+                <Text style={styles.shopName}>{item.name}</Text>
+                <Text style={styles.shopCity}>{item.address || "Dumaguete City"}</Text>
+                <Text style={styles.shopHours}>Hours: 8:00 AM - 9:00 PM</Text>
+              </View>
+              <View style={styles.methodIcons}>
+                {item.methods?.includes("delivery") && (
+                  <Ionicons name="bicycle" size={ms(22)} color="#000" />
+                )}
+                {item.methods?.includes("pickup") && (
+                  <Ionicons name="cube" size={ms(22)} color="#000" style={{ marginLeft: s(5) }} />
+                )}
+                {item.methods?.includes("dropoff") && (
+                  <Ionicons name="walk" size={ms(22)} color="#000" style={{ marginLeft: s(5) }} />
+                )}
+              </View>
+            </TouchableOpacity>
+          )}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No laundry shops found</Text>
             </View>
-            <View style={styles.shopInfo}>
-              <Text style={styles.shopName}>{item.name}</Text>
-              <Text style={styles.shopCity}>Dumaguete City</Text>
-              <Text style={styles.shopHours}>Hours: 8:00 AM - 9:00 PM</Text>
-            </View>
-            <Ionicons name="bicycle" size={ms(22)} color="#000" />
-            <Ionicons name="cube" size={ms(22)} color="#000" style={{ marginLeft: s(5) }} />
-          </TouchableOpacity>
-        )}
-      />
+          }
+        />
+      )}
     </View>
   );
 }
@@ -285,4 +347,9 @@ const styles = ScaledSheet.create({
   shopName: { fontSize: ms(16), fontWeight: "bold" },
   shopCity: { fontSize: ms(14), color: "gray" },
   shopHours: { fontSize: ms(12), color: "gray" },
+  methodIcons: { flexDirection: "row", alignItems: "center" },
+  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
+  loadingText: { fontSize: ms(16), color: "gray" },
+  emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", padding: mvs(20) },
+  emptyText: { fontSize: ms(16), color: "gray" },
 });
