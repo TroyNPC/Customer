@@ -36,15 +36,7 @@ export default function TabLayout() {
           ),
         }}
       />
-      <Tabs.Screen
-        name="notifications"
-        options={{
-          title: "Notifications",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="notifications-outline" size={28} color={color} />
-          ),
-        }}
-      />
+
       <Tabs.Screen
         name="orderhistory"
         options={{
@@ -55,6 +47,15 @@ export default function TabLayout() {
         }}
       />
 
+      <Tabs.Screen
+        name="notifications"
+        options={{
+          title: "Notifications",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="notifications-outline" size={28} color={color} />
+          ),
+        }}
+      />
   
 
       <Tabs.Screen

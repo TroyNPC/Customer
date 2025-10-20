@@ -100,7 +100,7 @@ interface OrderHistory {
   weight: number;
   price: number;
   status: string;
-  completed_at: string;
+  completed_at: string | null;
   created_at: string;
   shop_branches?: {
     name: string;
@@ -112,13 +112,21 @@ interface OrderHistory {
 
 export default function OrderHistory() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, guest } = useAuth();
   const [activeOrders, setActiveOrders] = useState<Order[]>([]);
   const [completedOrders, setCompletedOrders] = useState<OrderHistory[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchOrderData = async () => {
+    // Check if user is guest - skip API calls
+    if (guest) {
+      console.log('Guest mode - skipping order fetch');
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
     if (!user) {
       setLoading(false);
       return;
@@ -127,7 +135,7 @@ export default function OrderHistory() {
     try {
       console.log('Fetching order data for user:', user.id);
       
-      // Fetch active orders from orders table
+      // ✅ Fetch ACTIVE orders from orders table (orders that are still processing)
       const { data: activeOrdersData, error: activeError } = await supabaseClient
         .from('orders')
         .select(`
@@ -188,7 +196,7 @@ export default function OrderHistory() {
         console.error('Error fetching active orders:', activeError);
       }
 
-      // Fetch completed orders from order_history table
+      // ✅ Fetch COMPLETED orders from order_history table (past orders)
       const { data: completedOrdersData, error: completedError } = await supabaseClient
         .from('order_history')
         .select(`
@@ -200,15 +208,15 @@ export default function OrderHistory() {
             )
           )
         `)
-        .eq('customer_name', user.user_metadata?.full_name || user.email) // Adjust based on how you store customer info
+        .eq('customer_id', user.id)
         .order('completed_at', { ascending: false });
 
       if (completedError) {
         console.error('Error fetching completed orders:', completedError);
       }
 
-      console.log('Active orders:', activeOrdersData?.length);
-      console.log('Completed orders:', completedOrdersData?.length);
+      console.log('Active orders (still processing):', activeOrdersData?.length);
+      console.log('Completed orders (past orders):', completedOrdersData?.length);
       
       setActiveOrders(activeOrdersData || []);
       setCompletedOrders(completedOrdersData || []);
@@ -222,16 +230,41 @@ export default function OrderHistory() {
 
   useEffect(() => {
     fetchOrderData();
-  }, [user]);
+  }, [user, guest]);
 
   const onRefresh = () => {
     setRefreshing(true);
     fetchOrderData();
   };
 
+  // ✅ Helper function to determine if an order is still active/processing
+  const isOrderStillActive = (order: Order): boolean => {
+    // Check if order has any order_items that are not completed
+    if (order.order_items && order.order_items.length > 0) {
+      const hasIncompleteItems = order.order_items.some(item => 
+        item.status !== 'completed'
+      );
+      if (hasIncompleteItems) return true;
+    }
+
+    // Check delivery status
+    if (order.deliveries && order.deliveries.length > 0) {
+      const delivery = order.deliveries[0];
+      if (delivery.status !== 'delivered') return true;
+    }
+
+    // If no order_items or deliveries, check payment status
+    if (order.payments && order.payments.length > 0) {
+      const payment = order.payments[0];
+      if (payment.status !== 'completed') return true;
+    }
+
+    return false;
+  };
+
   // Helper function to determine order status and styling for active orders
   const getActiveOrderStatusInfo = (order: Order) => {
-    // Check delivery status
+    // Check delivery status first
     if (order.deliveries && order.deliveries.length > 0) {
       const delivery = order.deliveries[0];
       switch (delivery.status) {
@@ -298,10 +331,18 @@ export default function OrderHistory() {
           iconColor: '#28A745',
           showTrackButton: false
         };
+      } else if (itemsStatus.includes('in_progress')) {
+        return {
+          status: 'In Progress',
+          color: '#E3F2FD',
+          icon: 'time' as const,
+          iconColor: '#2196F3',
+          showTrackButton: false
+        };
       }
     }
 
-    // Default status
+    // Default status for new orders
     return {
       status: 'Processing',
       color: '#E3F2FD',
@@ -332,13 +373,95 @@ export default function OrderHistory() {
     });
   };
 
-  const formatTime = (dateString: string) => {
+  // Handle null values for formatTime
+  const formatTime = (dateString: string | null) => {
+    if (!dateString) return '';
     const date = new Date(dateString);
     return date.toLocaleTimeString('en-US', {
       hour: '2-digit',
       minute: '2-digit'
     });
   };
+
+  // Guest View
+  if (guest) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        {/* Header */}
+        <View style={styles.headerBox}>
+          <Svg
+            width="100%"
+            height={mvs(300)}
+            viewBox={`0 0 ${vbW} ${vbH}`}
+            style={styles.waveTop}
+            preserveAspectRatio="none"
+          >
+            <Path
+              fill="#3864C3"
+              d={`M0,${vbH * 0.2} C ${vbW * 0.5},${vbH * -0.1} ${vbW * 0.45},${vbH *
+                0.6} ${vbW},${vbH * 0.2} L${vbW},0 L0,0 Z`}
+            />
+          </Svg>
+
+          <View style={styles.headerContent}>
+            <TouchableOpacity onPress={() => router.back()}>
+              <Ionicons name="arrow-back" size={ms(24)} color="white" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Order History</Text>
+            <View style={{ width: s(24) }} />
+          </View>
+        </View>
+
+        {/* Guest Content */}
+        <ScrollView
+          style={{ flex: 1, backgroundColor: "#F5F6FA" }}
+          contentContainerStyle={{ 
+            flexGrow: 1, 
+            justifyContent: "center", 
+            alignItems: "center",
+            paddingHorizontal: s(20),
+            paddingBottom: mvs(100)
+          }}
+        >
+          <View style={styles.guestContainer}>
+            <Ionicons
+              name="receipt-outline"
+              size={ms(80)}
+              color="#3864C3"
+              style={{ marginBottom: mvs(20) }}
+            />
+            <Text style={styles.guestTitle}>Order History Unavailable</Text>
+            <Text style={styles.guestSubtitle}>
+              Please log in to view your order history, track deliveries, and save your preferences.
+            </Text>
+
+            <View style={styles.guestButtons}>
+              <TouchableOpacity
+                style={[styles.authButton, { backgroundColor: "#3864C3" }]}
+                onPress={() => router.push("/signup")}
+              >
+                <Text style={styles.authButtonText}>Create Account</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.authButton, { backgroundColor: "#4CAF50" }]}
+                onPress={() => router.push("/login")}
+              >
+                <Text style={styles.authButtonText}>Log In</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.authButton, { backgroundColor: "#6B7280" }]}
+                onPress={() => router.push("/(tabs)")}
+              >
+                <Text style={styles.authButtonText}>Back to Home</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
 
   if (loading) {
     return (
@@ -373,6 +496,7 @@ export default function OrderHistory() {
     );
   }
 
+  // Combine and sort all orders - active orders first, then completed orders
   const allOrders = [
     ...activeOrders.map(order => ({ ...order, type: 'active' as const })),
     ...completedOrders.map(order => ({ ...order, type: 'completed' as const }))
@@ -413,98 +537,158 @@ export default function OrderHistory() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        {allOrders.length === 0 ? (
+        {/* Active Orders Section */}
+        {activeOrders.length > 0 && (
+          <View style={styles.sectionContainer}>
+            <Text style={styles.sectionTitle}>Active Orders</Text>
+            <Text style={styles.sectionSubtitle}>Orders currently being processed</Text>
+            {activeOrders.map((order) => {
+              const statusInfo = getActiveOrderStatusInfo(order);
+              const shopName = order.shop_branches?.shops?.name || 'Laundry Shop';
+              const branchName = order.shop_branches?.name || '';
+              const serviceName = order.shop_services?.name;
+              const totalAmount = order.payments?.[0]?.amount;
+              const driverName = order.deliveries?.[0]?.users?.full_name;
+
+              return (
+                <View
+                  key={order.id}
+                  style={[styles.orderCard, { backgroundColor: statusInfo.color }]}
+                >
+                  <View style={styles.orderRow}>
+                    <View style={[styles.iconContainer, { backgroundColor: statusInfo.color }]}>
+                      <Ionicons
+                        name={statusInfo.icon}
+                        size={ms(28)}
+                        color={statusInfo.iconColor}
+                      />
+                    </View>
+
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.name}>
+                        {driverName || shopName}
+                      </Text>
+                      <Text style={styles.subText}>
+                        {statusInfo.status}
+                        {order.shop_methods?.label && ` - ${order.shop_methods.label}`}
+                      </Text>
+                      
+                      {serviceName && (
+                        <Text style={styles.subText}>
+                          Service: {serviceName}
+                        </Text>
+                      )}
+                      
+                      <Text style={styles.shopText}>
+                        {shopName}{branchName ? ` - ${branchName}` : ''}
+                      </Text>
+
+                      {totalAmount && (
+                        <Text style={styles.subText}>
+                          Total: ₱{totalAmount}
+                        </Text>
+                      )}
+
+                      {statusInfo.showTrackButton && (
+                        <TouchableOpacity
+                          style={styles.trackButton}
+                          onPress={() => router.push("/trackdeliveryboy")}
+                        >
+                          <Text style={styles.trackButtonText}>
+                            Track Delivery
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+
+                      <Text style={styles.dateText}>
+                        Ordered: {formatDate(order.created_at)}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        {/* Completed Orders Section */}
+        {completedOrders.length > 0 && (
+          <View style={styles.sectionContainer}>
+            <Text style={styles.sectionTitle}>Order History</Text>
+            <Text style={styles.sectionSubtitle}>Your completed orders</Text>
+            {completedOrders.map((order) => {
+              const statusInfo = getCompletedOrderStatusInfo(order);
+              const shopName = order.shop_branches?.shops?.name || 'Laundry Shop';
+              const branchName = order.shop_branches?.name || '';
+              const serviceName = order.service_name;
+              const totalAmount = order.price;
+
+              return (
+                <View
+                  key={order.id}
+                  style={[styles.orderCard, { backgroundColor: statusInfo.color }]}
+                >
+                  <View style={styles.orderRow}>
+                    <View style={[styles.iconContainer, { backgroundColor: statusInfo.color }]}>
+                      <Ionicons
+                        name={statusInfo.icon}
+                        size={ms(28)}
+                        color={statusInfo.iconColor}
+                      />
+                    </View>
+
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.name}>
+                        {shopName}
+                      </Text>
+                      <Text style={styles.subText}>
+                        {statusInfo.status}
+                        {order.method_label && ` - ${order.method_label}`}
+                      </Text>
+                      
+                      {serviceName && (
+                        <Text style={styles.subText}>
+                          Service: {serviceName}
+                        </Text>
+                      )}
+                      
+                      <Text style={styles.shopText}>
+                        {shopName}{branchName ? ` - ${branchName}` : ''}
+                      </Text>
+
+                      {totalAmount && (
+                        <Text style={styles.subText}>
+                          Total: ₱{totalAmount}
+                        </Text>
+                      )}
+
+                      <Text style={styles.dateText}>
+                        Completed: {formatDate(order.completed_at || order.created_at)}
+                        {order.completed_at && ` • ${formatTime(order.completed_at)}`}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        {/* Empty State */}
+        {activeOrders.length === 0 && completedOrders.length === 0 && (
           <View style={styles.emptyContainer}>
             <Ionicons name="receipt-outline" size={ms(64)} color="#CCCCCC" />
             <Text style={styles.emptyText}>No orders found</Text>
             <Text style={styles.emptySubtext}>
-              Your order history will appear here
+              Your order history will appear here once you place an order
             </Text>
+            <TouchableOpacity
+              style={styles.shopButton}
+              onPress={() => router.push("/map")}
+            >
+              <Text style={styles.shopButtonText}>Start Shopping</Text>
+            </TouchableOpacity>
           </View>
-        ) : (
-          allOrders.map((order) => {
-            const statusInfo = order.type === 'active' 
-              ? getActiveOrderStatusInfo(order)
-              : getCompletedOrderStatusInfo(order);
-
-            const shopName = order.shop_branches?.shops?.name || 'Laundry Shop';
-            const branchName = order.shop_branches?.name || '';
-            const serviceName = order.type === 'active' 
-              ? order.shop_services?.name 
-              : (order as OrderHistory).service_name;
-            const totalAmount = order.type === 'active'
-              ? order.payments?.[0]?.amount
-              : (order as OrderHistory).price;
-
-            const driverName = order.type === 'active' 
-              ? order.deliveries?.[0]?.users?.full_name
-              : null;
-
-            return (
-              <View
-                key={order.id}
-                style={[styles.orderCard, { backgroundColor: statusInfo.color }]}
-              >
-                {/* Icon and Info */}
-                <View style={styles.orderRow}>
-                  <View style={[styles.iconContainer, { backgroundColor: statusInfo.color }]}>
-                    <Ionicons
-                      name={statusInfo.icon}
-                      size={ms(28)}
-                      color={statusInfo.iconColor}
-                    />
-                  </View>
-
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.name}>
-                      {driverName || shopName}
-                    </Text>
-                    <Text style={styles.subText}>
-                      {statusInfo.status}
-                      {order.type === 'active' && (order as Order).shop_methods?.label && 
-                        ` - ${(order as Order).shop_methods.label}`}
-                      {order.type === 'completed' && (order as OrderHistory).method_label && 
-                        ` - ${(order as OrderHistory).method_label}`}
-                    </Text>
-                    
-                    {serviceName && (
-                      <Text style={styles.subText}>
-                        Service: {serviceName}
-                      </Text>
-                    )}
-                    
-                    <Text style={styles.shopText}>
-                      {shopName}{branchName ? ` - ${branchName}` : ''}
-                    </Text>
-
-                    {totalAmount && (
-                      <Text style={styles.subText}>
-                        Total: ₱{totalAmount}
-                      </Text>
-                    )}
-
-                    {statusInfo.showTrackButton && (
-                      <TouchableOpacity
-                        style={styles.trackButton}
-                        onPress={() => router.push("/trackdeliveryboy")}
-                      >
-                        <Text style={styles.trackButtonText}>
-                          Track Delivery
-                        </Text>
-                      </TouchableOpacity>
-                    )}
-
-                    <Text style={styles.dateText}>
-                      {formatDate(order.created_at)}
-                      {order.type === 'completed' && (
-                        ` • ${formatTime((order as OrderHistory).completed_at)}`
-                      )}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            );
-          })
         )}
       </ScrollView>
     </SafeAreaView>
@@ -548,6 +732,59 @@ const styles = ScaledSheet.create({
     fontSize: ms(16),
     color: "#666",
   },
+  // Section styles
+  sectionContainer: {
+    marginBottom: mvs(20),
+  },
+  sectionTitle: {
+    fontSize: ms(18),
+    fontWeight: "bold",
+    color: "#000",
+    marginHorizontal: s(15),
+    marginBottom: mvs(5),
+  },
+  sectionSubtitle: {
+    fontSize: ms(12),
+    color: "#666",
+    marginHorizontal: s(15),
+    marginBottom: mvs(10),
+  },
+  // Guest styles
+  guestContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: mvs(40),
+  },
+  guestTitle: {
+    fontSize: ms(20),
+    fontWeight: "bold",
+    color: "#000",
+    marginBottom: mvs(15),
+    textAlign: "center",
+  },
+  guestSubtitle: {
+    fontSize: ms(14),
+    color: "#666",
+    textAlign: "center",
+    lineHeight: ms(20),
+    marginBottom: mvs(30),
+  },
+  guestButtons: {
+    width: "100%",
+    alignItems: "center",
+  },
+  authButton: {
+    width: s(150), // ✅ Fixed width for all buttons
+    paddingVertical: mvs(12),
+    borderRadius: s(10),
+    marginBottom: mvs(10),
+  },
+  authButtonText: {
+    color: "#fff",
+    fontSize: ms(14),
+    textAlign: "center",
+    fontWeight: "bold",
+  },
   emptyContainer: {
     alignItems: "center",
     justifyContent: "center",
@@ -566,6 +803,18 @@ const styles = ScaledSheet.create({
     color: "#999",
     marginTop: mvs(10),
     textAlign: "center",
+    marginBottom: mvs(20),
+  },
+  shopButton: {
+    backgroundColor: "#3864C3",
+    paddingVertical: mvs(12),
+    paddingHorizontal: s(30),
+    borderRadius: s(10),
+  },
+  shopButtonText: {
+    color: "#fff",
+    fontSize: ms(14),
+    fontWeight: "bold",
   },
   orderCard: {
     borderRadius: s(12),

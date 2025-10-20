@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, FlatList, Text, TouchableOpacity, View } from "react-native";
 import { ScaledSheet, ms, mvs, s } from "react-native-size-matters";
 import Svg, { Path } from "react-native-svg";
@@ -19,6 +19,7 @@ export default function MapScreen() {
   const [tracking, setTracking] = useState(false);
   const [selectedShop, setSelectedShop] = useState<string | null>(null);
   const locationWatcher = useRef<any>(null);
+  const [webViewReady, setWebViewReady] = useState(false);
 
   // Fetch laundry shops from database
   useEffect(() => {
@@ -94,9 +95,9 @@ export default function MapScreen() {
     webRef.current?.postMessage(JSON.stringify({ action: "focusShop", id: selectedShop, track: true }));
   }, [tracking, selectedShop, location]);
 
-  // Update WebView when laundry shops data changes
-  useEffect(() => {
-    if (laundryShops.length > 0 && webRef.current) {
+  // Send shops data to WebView when both data and WebView are ready
+  const sendShopsToMap = useCallback(() => {
+    if (laundryShops.length > 0 && webViewReady && webRef.current) {
       // Send updated shops data to WebView
       webRef.current.postMessage(
         JSON.stringify({ 
@@ -110,7 +111,12 @@ export default function MapScreen() {
         })
       );
     }
-  }, [laundryShops]);
+  }, [laundryShops, webViewReady]);
+
+  // Update WebView when laundry shops data changes or WebView becomes ready
+  useEffect(() => {
+    sendShopsToMap();
+  }, [sendShopsToMap]);
 
   const leafletHTML = `<!DOCTYPE html>
   <html>
@@ -283,6 +289,7 @@ export default function MapScreen() {
           originWhitelist={["*"]} 
           source={{ html: leafletHTML }} 
           onMessage={handleMessage} 
+          onLoadEnd={() => setWebViewReady(true)}
           style={{ flex: 1 }} 
         />
         <TouchableOpacity style={styles.gpsButton} onPress={centerOnUser}>

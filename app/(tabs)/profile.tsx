@@ -181,9 +181,9 @@ export default function Profile() {
 
               <TouchableOpacity
                 style={[styles.authButton, { backgroundColor: "#6B7280", marginTop: verticalScale(10) }]}
-                onPress={() => router.push("/")}
+                onPress={() => router.push("/map")}
               >
-                <Text style={styles.authText}>Back to Home</Text>
+                <Text style={styles.authText}>Go to Map</Text>
               </TouchableOpacity>
             </View>
           </View>
