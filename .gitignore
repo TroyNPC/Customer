@@ -39,3 +39,10 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+# Firebase Service Account Keys (PRIVATE - NEVER COMMIT)
+*-firebase-adminsdk-*.json
+service-account-key.json
+firebase-key.json
+
+# Google Services (PUBLIC - OK TO COMMIT)
+# !google-services.json  # ← Remove the ! if you want to ignore it, but it's safe to commit

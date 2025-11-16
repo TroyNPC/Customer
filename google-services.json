@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "18300207745",
+    "project_id": "laundryapp-notifications",
+    "storage_bucket": "laundryapp-notifications.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:18300207745:android:31540fe4f3b5a7c91ec380",
+        "android_client_info": {
+          "package_name": "com.firenado.LaundryApp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDj9XqxBzu4rtvWvwtDxdjc0VvbSby2c4c"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
