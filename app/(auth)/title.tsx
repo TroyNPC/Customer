@@ -1,7 +1,7 @@
 import { useAuth } from '../../lib/Auth';
 import { useRouter } from 'expo-router';
-import React from 'react';
-import { Dimensions, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect } from 'react';
+import { Dimensions, Image, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -15,7 +15,16 @@ const vbH = 320;
 
 export default function TitleScreen() {
   const router = useRouter();
-  const { loginAsGuest } = useAuth();
+  const { loginAsGuest, loggedIn, isLoading } = useAuth();
+
+  // Check for existing session on component mount
+  useEffect(() => {
+    // If user is already logged in (either as guest or authenticated), redirect to map
+    if (!isLoading && loggedIn) {
+      console.log('User already logged in, redirecting to map...');
+      router.replace('/(tabs)/map');
+    }
+  }, [loggedIn, isLoading]);
 
   const handleLogin = () => {
     router.replace('/(auth)/login');
@@ -23,8 +32,28 @@ export default function TitleScreen() {
 
   const handleGuest = () => {
     loginAsGuest();
-    router.replace('/(tabs)/map');
+    // The navigation will be handled by the AuthProvider's updateAuthState
   };
+
+  // Show loading indicator while checking auth state
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#0AADFF" />
+        <Text style={styles.loadingText}>Checking authentication...</Text>
+      </View>
+    );
+  }
+
+  // Don't render the title screen if user is already logged in
+  if (loggedIn) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#0AADFF" />
+        <Text style={styles.loadingText}>Redirecting...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -110,6 +139,18 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0AADFF',
     alignItems: 'center',
+  },
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: '#0AADFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: 'white',
+    fontWeight: '500',
   },
   topWave: {
     position: 'absolute',
