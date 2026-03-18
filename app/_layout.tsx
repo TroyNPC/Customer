@@ -21,6 +21,7 @@ export default function RootLayout() {
           <Stack.Screen name="(auth)" />
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="shop/[id]" />
+               <Stack.Screen name="chatbot" options={{ headerShown: true, title: 'Chatbot' }} />
         </Stack>
       </AuthProvider>
     </QueryClientProvider>
