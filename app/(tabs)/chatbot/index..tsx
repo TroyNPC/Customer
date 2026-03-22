@@ -1,9 +1,20 @@
 // app/chatbot/index.tsx
-import { View, Text, TextInput, Button, FlatList, Alert, ActivityIndicator, TouchableOpacity } from "react-native";
+import { View, Text, TextInput, FlatList, TouchableOpacity, ActivityIndicator } from "react-native";
 import { useState, useEffect } from "react";
 import { supabase } from "../../../lib/supabase";
 import { askGemini } from "../../../lib/gemini";
+import { 
+  getCheapestLaundries, 
+  getNearbyLaundries, 
+  getServicesByShop, 
+  getUserOrders,
+  getOrderStatus,
+  getLaundryTips,
+  ShopWithDetails
+} from "../../../lib/supabase-queries";
+import { formatPrice, formatDistance } from "../../../lib/formatHelpers";
 
+// Types
 interface Message {
   role: "user" | "bot";
   text: string;
@@ -11,7 +22,14 @@ interface Message {
   isTyping?: boolean;
 }
 
-export default function Chatbot() {
+interface QueryEntities {
+  shopName?: string;
+  orderId?: string;
+  location?: string;
+  [key: string]: any;
+}
+
+export default function ChatbotScreen() {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -29,20 +47,192 @@ export default function Chatbot() {
     "How much does laundry cost?"
   ]);
 
+  // ============== HANDLER FUNCTIONS ==============
+
+  async function handleCheapestQuery(entities: QueryEntities): Promise<string> {
+    try {
+      const result = await getCheapestLaundries(5);
+      
+      if (!result.success || !result.data || result.data.length === 0) {
+        return "I couldn't find any laundry services in our database at the moment. Please check back later! 🏪";
+      }
+
+      let response = "🏆 **Here are the most affordable laundries:**\n\n";
+      
+      result.data.forEach((shop: ShopWithDetails, index: number) => {
+        response += `${index + 1}. **${shop.name}** (${shop.branchName})\n`;
+        response += `   💰 Only ${formatPrice(shop.pricePerKg)}/kg\n`;
+        response += `   📍 ${shop.address}\n\n`;
+      });
+
+      response += "Would you like more details about any of these? Just ask! 😊";
+      
+      return response;
+    } catch (error) {
+      console.error("Error fetching cheapest:", error);
+      return "I had trouble finding the cheapest laundries. Please try again in a moment. 🔄";
+    }
+  }
+
+  async function handleNearestQuery(entities: QueryEntities): Promise<string> {
+    try {
+      const result = await getNearbyLaundries(undefined, undefined, 5);
+
+      if (!result.success || !result.data || result.data.length === 0) {
+        return "I couldn't find any laundry shops nearby. 🗺️";
+      }
+
+      let response = "📍 **Laundry shops near you:**\n\n";
+      
+      result.data.forEach((shop: ShopWithDetails, index: number) => {
+        response += `${index + 1}. **${shop.name}** - ${shop.branchName}\n`;
+        response += `   📍 ${shop.address}\n`;
+        if (shop.distance) {
+          response += `   📏 ${formatDistance(shop.distance)}\n`;
+        }
+        response += `   💰 From ${formatPrice(shop.pricePerKg)}/kg\n\n`;
+      });
+
+      response += "Want to know more about any of these shops? Just ask! 🏪";
+      
+      return response;
+    } catch (error) {
+      console.error("Error fetching nearest:", error);
+      return "I couldn't find nearby laundries right now. Please try again later. 🔄";
+    }
+  }
+
+  async function handleServicesQuery(entities: QueryEntities): Promise<string> {
+    const shopName = entities?.shopName;
+    
+    try {
+      const result = await getServicesByShop(shopName);
+
+      if (!result.success || !result.data || result.data.length === 0) {
+        return shopName 
+          ? `I couldn't find any services for ${shopName}. They might not be in our database yet. 🏪`
+          : "I couldn't find any laundry services at the moment. 📋";
+      }
+
+      const servicesByShop: Record<string, any[]> = {};
+      result.data.forEach((service: any) => {
+        const shopKey = service.shop_branches?.shops?.name || "Unknown";
+        if (!servicesByShop[shopKey]) {
+          servicesByShop[shopKey] = [];
+        }
+        servicesByShop[shopKey].push(service);
+      });
+
+      let response = "📋 **Available Laundry Services:**\n\n";
+      
+      Object.entries(servicesByShop).forEach(([shopName, services]: [string, any[]]) => {
+        response += `🏪 **${shopName}**\n`;
+        services.slice(0, 3).forEach((service: any) => {
+          response += `   • ${service.name}`;
+          if (service.price_per_kg) {
+            response += ` - ${formatPrice(service.price_per_kg)}/kg`;
+          }
+          response += "\n";
+        });
+        if (services.length > 3) {
+          response += `   • ...and ${services.length - 3} more services\n`;
+        }
+        response += "\n";
+      });
+
+      response += "Is there a specific service you're interested in? 😊";
+      
+      return response;
+    } catch (error) {
+      console.error("Error fetching services:", error);
+      return "I had trouble fetching the services. Please try again. 🔄";
+    }
+  }
+
+  async function handleOrderStatusQuery(entities: QueryEntities): Promise<string> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        return `🔍 **Order Status Check**
+
+To check your order status, you need to:
+
+1️⃣ **Log in** to your account
+2️⃣ **Go to the Orders tab** to see all your orders
+
+Or if you have an order number, just type it here and I'll look it up! 📱
+
+Example format: ORD-2024-001 or #12345`;
+      }
+      
+      const result = await getUserOrders(user.id, 5);
+      
+      if (!result.success || !result.data || result.data.length === 0) {
+        return "You don't have any orders yet. Would you like help finding a laundry shop to get started? 🏪";
+      }
+
+      let response = "📋 **Your Recent Orders:**\n\n";
+      
+      result.data.forEach((order: any, index: number) => {
+        response += `${index + 1}. **Order #${order.id.substring(0, 8)}**\n`;
+        response += `   🏪 ${order.shopName}\n`;
+        response += `   📅 ${new Date(order.createdAt).toLocaleDateString()}\n`;
+        response += `   👕 ${order.serviceName}\n`;
+        response += `   📍 Status: ${order.status}\n\n`;
+      });
+
+      response += "Want details about a specific order? Just tell me the order number! 🔍";
+      
+      return response;
+    } catch (error) {
+      console.error("Error checking order:", error);
+      return "I had trouble checking your order. Please try again or contact support. 🆘";
+    }
+  }
+
+  async function handleGeneralQuery(aiResponse: string, userMessage: string, entities: QueryEntities): Promise<string> {
+    const msgLower = userMessage.toLowerCase();
+    
+    if (msgLower.includes("tip") || msgLower.includes("paano") || msgLower.includes("how to")) {
+      const topic = msgLower.includes("stain") ? "stain" : 
+                    msgLower.includes("white") ? "white" :
+                    msgLower.includes("color") ? "color" : "general";
+      
+      const tips = await getLaundryTips(topic);
+      
+      if (tips.success && tips.data) {
+        let tipResponse = "🧺 **Laundry Tips:**\n\n";
+        tips.data.forEach((tip: string, i: number) => {
+          tipResponse += `${i + 1}. ${tip}\n`;
+        });
+        return tipResponse + "\n" + aiResponse;
+      }
+    }
+    
+    if (msgLower.includes("price") || msgLower.includes("cost") || msgLower.includes("magkano")) {
+      const prices = await getCheapestLaundries(3);
+      if (prices.success && prices.data) {
+        return aiResponse + "\n\n**Quick price reference:**\n" + 
+               prices.data.map((s: ShopWithDetails) => `• ${s.name}: ${formatPrice(s.pricePerKg)}/kg`).join("\n");
+      }
+    }
+    
+    return aiResponse;
+  }
+
   async function handleSendMessage() {
-    if (!message.trim()) return;
+    if (!message.trim() || isLoading) return;
 
     const userMessage = message.trim();
     setMessage("");
     
-    // Add user message
     setMessages(prev => [...prev, { 
       role: "user", 
       text: userMessage,
       timestamp: new Date() 
     }]);
 
-    // Show typing indicator
     setMessages(prev => [...prev, { 
       role: "bot", 
       text: "...", 
@@ -53,13 +243,15 @@ export default function Chatbot() {
     setIsLoading(true);
 
     try {
-      // Get AI response
-      const { intent, entities, response: aiResponse } = await askGemini(userMessage);
+      const recentHistory = messages.slice(-4).map(m => ({
+        role: m.role === "user" ? "user" : "assistant",
+        content: m.text
+      }));
+
+      const { intent, entities, response: aiResponse } = await askGemini(userMessage, recentHistory);
       
-      // Remove typing indicator
       setMessages(prev => prev.filter(msg => !msg.isTyping));
 
-      // Handle different intents
       let botResponse = "";
 
       switch (intent) {
@@ -75,15 +267,16 @@ export default function Chatbot() {
         case "ORDER_STATUS":
           botResponse = await handleOrderStatusQuery(entities);
           break;
+        case "GENERAL":
+          botResponse = await handleGeneralQuery(aiResponse, userMessage, entities);
+          break;
         case "OUT_OF_SCOPE":
           botResponse = aiResponse;
           break;
         default:
-          // For GENERAL intent, use Gemini's response but enhance with data if needed
-          botResponse = await enhanceGeneralResponse(aiResponse, userMessage);
+          botResponse = aiResponse;
       }
 
-      // Add bot response
       setMessages(prev => [...prev, { 
         role: "bot", 
         text: botResponse,
@@ -93,7 +286,6 @@ export default function Chatbot() {
     } catch (error) {
       console.error("Error:", error);
       
-      // Remove typing indicator
       setMessages(prev => prev.filter(msg => !msg.isTyping));
       
       setMessages(prev => [...prev, { 
@@ -104,212 +296,6 @@ export default function Chatbot() {
     } finally {
       setIsLoading(false);
     }
-  }
-
-  async function handleCheapestQuery(entities: any) {
-    try {
-      const { data, error } = await supabase
-        .from("shop_services")
-        .select(`
-          price_per_kg,
-          name,
-          description,
-          shop_branches (
-            id,
-            name,
-            address,
-            shops (
-              name,
-              logo_url
-            )
-          )
-        `)
-        .order("price_per_kg", { ascending: true })
-        .limit(5);
-
-      if (error) throw error;
-
-      if (!data || data.length === 0) {
-        return "I couldn't find any laundry services in our database at the moment. Please check back later! 🏪";
-      }
-
-      let response = "🏆 **Here are the most affordable laundries:**\n\n";
-      
-      data.forEach((service, index) => {
-        const branch = service.shop_branches;
-        const shop = branch?.shops;
-        
-        response += `${index + 1}. **${shop?.name}** (${branch?.name})\n`;
-        response += `   💰 Only ₱${service.price_per_kg}/kg\n`;
-        response += `   📍 ${branch?.address}\n`;
-        if (service.description) {
-          response += `   ℹ️ ${service.description}\n`;
-        }
-        response += "\n";
-      });
-
-      response += "Would you like more details about any of these? Just ask! 😊";
-      
-      return response;
-    } catch (error) {
-      console.error("Error fetching cheapest:", error);
-      return "I had trouble finding the cheapest laundries. Please try again in a moment. 🔄";
-    }
-  }
-
-  async function handleNearestQuery(entities: any) {
-    try {
-      // For now, just show available branches
-      // In a real app, you'd use user's location
-      const { data, error } = await supabase
-        .from("shop_branches")
-        .select(`
-          id,
-          name,
-          address,
-          shops (
-            name,
-            logo_url
-          ),
-          shop_services (
-            price_per_kg
-          )
-        `)
-        .limit(5);
-
-      if (error) throw error;
-
-      if (!data || data.length === 0) {
-        return "I couldn't find any laundry shops nearby. 🗺️";
-      }
-
-      let response = "📍 **Laundry shops near you:**\n\n";
-      
-      data.forEach((branch, index) => {
-        const shop = branch.shops;
-       const validPrices = branch.shop_services
-  ?.map(s => s.price_per_kg)
-  .filter((price): price is number => price !== null); // Remove nulls and tell TypeScript these are now numbers
-
-const cheapestPrice = validPrices && validPrices.length > 0 
-  ? Math.min(...validPrices)  // Now all values are guaranteed to be numbers
-  : null;
-        response += `${index + 1}. **${shop?.name}** - ${branch.name}\n`;
-        response += `   📍 ${branch.address}\n`;
-        if (cheapestPrice) {
-          response += `   💰 From ₱${cheapestPrice}/kg\n`;
-        }
-        response += "\n";
-      });
-
-      response += "Want to know more about any of these shops? Just ask! 🏪";
-      
-      return response;
-    } catch (error) {
-      console.error("Error fetching nearest:", error);
-      return "I couldn't find nearby laundries right now. Please try again later. 🔄";
-    }
-  }
-
-  async function handleServicesQuery(entities: any) {
-    const shopName = entities?.shopName;
-    
-    try {
-      let query = supabase
-        .from("shop_services")
-        .select(`
-          name,
-          description,
-          price_per_kg,
-          shop_branches (
-            name,
-            shops (
-              name
-            )
-          )
-        `)
-        .limit(10);
-
-      if (shopName) {
-        // Filter by shop name if specified
-        query = query.ilike('shop_branches.shops.name', `%${shopName}%`);
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-
-      if (!data || data.length === 0) {
-        return shopName 
-          ? `I couldn't find any services for ${shopName}. They might not be in our database yet. 🏪`
-          : "I couldn't find any laundry services at the moment. 📋";
-      }
-
-      // Group by shop
-      const servicesByShop: any = {};
-      data.forEach(service => {
-        const shopKey = service.shop_branches?.shops?.name || "Unknown";
-        if (!servicesByShop[shopKey]) {
-          servicesByShop[shopKey] = [];
-        }
-        servicesByShop[shopKey].push(service);
-      });
-
-      let response = "📋 **Available Laundry Services:**\n\n";
-      
-      Object.entries(servicesByShop).forEach(([shopName, services]: [string, any]) => {
-        response += `🏪 **${shopName}**\n`;
-        services.forEach((service: any) => {
-          response += `   • ${service.name}`;
-          if (service.price_per_kg) {
-            response += ` - ₱${service.price_per_kg}/kg`;
-          }
-          if (service.description) {
-            response += `\n     ${service.description}`;
-          }
-          response += "\n";
-        });
-        response += "\n";
-      });
-
-      response += "Is there a specific service you're interested in? 😊";
-      
-      return response;
-    } catch (error) {
-      console.error("Error fetching services:", error);
-      return "I had trouble fetching the services. Please try again. 🔄";
-    }
-  }
-
-  async function handleOrderStatusQuery(entities: any) {
-    // This would need user authentication to work properly
-    // For now, return a helpful message
-    return "To check your order status, please:\n\n" +
-           "1️⃣ Make sure you're logged in\n" +
-           "2️⃣ Go to the 'Orders' tab\n" +
-           "3️⃣ You can also provide your order number and I'll check!\n\n" +
-           "If you have an order number, just type it here and I'll look it up. 🔍";
-  }
-
-  async function enhanceGeneralResponse(aiResponse: string, userMessage: string) {
-    // Check if the response might benefit from actual data
-    const msgLower = userMessage.toLowerCase();
-    
-    if (msgLower.includes("price") || msgLower.includes("cost") || msgLower.includes("how much")) {
-      // Fetch some price data to enhance response
-      const { data } = await supabase
-        .from("shop_services")
-        .select("price_per_kg, name, shop_branches(shops(name))")
-        .order("price_per_kg", { ascending: true })
-        .limit(3);
-      
-      if (data && data.length > 0) {
-        return aiResponse + "\n\n**Quick price reference:**\n" + 
-               data.map(s => `• ${s.shop_branches?.shops?.name}: ₱${s.price_per_kg}/kg`).join("\n");
-      }
-    }
-    
-    return aiResponse;
   }
 
   const renderMessage = ({ item }: { item: Message }) => {
